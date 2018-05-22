@@ -4,6 +4,7 @@ const IO = require('./io');
 const highlight = require('./highlight');
 const util = require('util');
 const vm = require('vm');
+const sendInspectorCommand = require('./inspector');
 
 const inspect = (v) => util.inspect(v, { colors: true });
 
@@ -14,6 +15,19 @@ const evil = (code) =>
     filename: 'repl',
   }).runInThisContext({
     displayErrors: true,
+  });
+
+const getGlobalLexicalScopeNames = (contextId) =>
+  sendInspectorCommand((session) => {
+    let names = [];
+    session.post('Runtime.globalLexicalScopeNames', {
+      executionContextId: contextId,
+    }, (error, result) => {
+      if (!error) {
+        ({ names } = result);
+      }
+    });
+    return names;
   });
 
 class REPL {
@@ -52,29 +66,38 @@ class REPL {
 
   async onAutocomplete(buffer) {
     try {
-      if (!/\w|\.|\$/.test(buffer)) {
-        return undefined;
-      }
-
       let filter;
-      let expr;
-      const match = simpleExpressionRE.exec(buffer);
-      if (buffer.length === 0) {
-        filter = '';
-        expr = '';
-      } else if (buffer[buffer.length - 1] === '.') {
-        filter = '';
-        expr = match[0].slice(0, match[0].length - 1);
-      } else {
-        const bits = match[0].split('.');
-        filter = bits.pop();
-        expr = bits.join('.');
+      let keys;
+      if (/\w|\.|\$/.test(buffer)) {
+        let expr;
+        const match = simpleExpressionRE.exec(buffer);
+        if (buffer.length === 0) {
+          filter = '';
+          expr = '';
+        } else if (buffer[buffer.length - 1] === '.') {
+          filter = '';
+          expr = match[0].slice(0, match[0].length - 1);
+        } else {
+          const bits = match[0].split('.');
+          filter = bits.pop();
+          expr = bits.join('.');
+        }
+
+        if (expr === '') {
+          keys = await getGlobalLexicalScopeNames();
+        } else {
+          const o = this.eval(`try { ${expr} }catch (e) {}`);
+
+          if (o) {
+            keys = Object.getOwnPropertyNames(o);
+          }
+        }
+      } else if (buffer.length === 0) {
+        keys = await getGlobalLexicalScopeNames();
+        keys.push(...Object.getOwnPropertyNames(global));
       }
 
-      const o = this.eval(`try { ${expr} }catch (e) {}`);
-
-      if (o) {
-        const keys = Object.getOwnPropertyNames(o);
+      if (keys) {
         if (filter) {
           return keys
             .filter((k) => k.startsWith(filter))
