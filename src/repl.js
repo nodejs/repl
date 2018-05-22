@@ -2,6 +2,9 @@
 
 const IO = require('./io');
 const highlight = require('./highlight');
+const util = require('util');
+
+const inspect = (v) => util.inspect(v, { colors: true });
 
 class REPL {
   constructor(stdout, stdin) {
@@ -13,10 +16,18 @@ class REPL {
     );
 
     this.io.setPrefix('> ');
+
+    global._ = undefined;
   }
 
   async onLine(line) {
-    return `${eval(line)}`;
+    try {
+      global._ = eval(line);
+      return inspect(global._);
+    } catch (err) {
+      global._err = err;
+      return inspect(err, {});
+    }
   }
 
   async onAutocomplete(buffer) {
