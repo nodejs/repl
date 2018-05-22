@@ -109,9 +109,7 @@ class IO {
         for (let i = 0; i < data.length; i += 1) {
           const { value } = await decoder.next(data[i]);
           if (value === -1) {
-            decoder.return();
-            stdin.end();
-            return;
+            process.exit(0);
           }
         }
         stdin.once('data', handle);

@@ -30,6 +30,14 @@ const getGlobalLexicalScopeNames = (contextId) =>
     return names;
   });
 
+const collectGlobalNames = async () => {
+  const keys = Object.getOwnPropertyNames(global);
+  try {
+    keys.unshift(...await getGlobalLexicalScopeNames());
+  } catch {}
+  return keys;
+}
+
 class REPL {
   constructor(stdout, stdin) {
     this.io = new IO(
@@ -84,7 +92,7 @@ class REPL {
         }
 
         if (expr === '') {
-          keys = await getGlobalLexicalScopeNames();
+          keys = await collectGlobalNames();
         } else {
           const o = this.eval(`try { ${expr} }catch (e) {}`);
 
@@ -93,10 +101,7 @@ class REPL {
           }
         }
       } else if (buffer.length === 0) {
-        keys = Object.getOwnPropertyNames(global);
-        try {
-          keys.unshift(...await getGlobalLexicalScopeNames());
-        } catch {}
+        keys = await collectGlobalNames();
       }
 
       if (keys) {
