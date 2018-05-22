@@ -93,8 +93,10 @@ class REPL {
           }
         }
       } else if (buffer.length === 0) {
-        keys = await getGlobalLexicalScopeNames();
-        keys.push(...Object.getOwnPropertyNames(global));
+        keys = Object.getOwnPropertyNames(global);
+        try {
+          keys.unshift(...await getGlobalLexicalScopeNames());
+        } catch {}
       }
 
       if (keys) {
