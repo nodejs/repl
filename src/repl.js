@@ -3,6 +3,7 @@
 const IO = require('./io');
 const highlight = require('./highlight');
 const util = require('util');
+const vm = require('vm');
 
 const inspect = (v) => util.inspect(v, { colors: true });
 
@@ -19,13 +20,18 @@ class REPL {
     );
 
     this.io.setPrefix('> ');
+  }
 
-    global._ = undefined;
+  eval(code) {
+    return new vm.Script(code).runInThisContext({
+      filename: 'repl',
+      displayErrors: true,
+    });
   }
 
   async onLine(line) {
     try {
-      global._ = eval(line);
+      global._ = this.eval(line);
       return inspect(global._);
     } catch (err) {
       global._err = err;
@@ -54,7 +60,7 @@ class REPL {
         expr = bits.join('.');
       }
 
-      const o = eval(`try { ${expr} }catch (e) {}`);
+      const o = this.eval(`try { ${expr} }catch (e) {}`);
 
       if (o) {
         const keys = Object.getOwnPropertyNames(o);
