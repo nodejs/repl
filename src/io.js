@@ -12,6 +12,7 @@ class IO {
     this.buffer = '';
     this.cursor = 0;
     this.prefix = '';
+    this.suffix = '';
 
     this.paused = false;
     this.queue = [];
@@ -43,6 +44,14 @@ class IO {
           await this.moveCursor(-1);
           break;
         case 'right':
+          if (this.cursor === this.buffer.length) {
+            if (this.suffix) {
+              this.buffer += this.suffix;
+              this.cursor += this.suffix.length;
+              this.refresh();
+            }
+            break;
+          }
           await this.moveCursor(1);
           break;
         case 'delete':
@@ -54,9 +63,13 @@ class IO {
             this.buffer.slice(this.cursor, this.buffer.length);
           await this.moveCursor(-1);
           break;
-        case 'tab':
-          await onAutocomplete(this.buffer);
+        case 'tab': {
+          const [c] = await onAutocomplete(this.buffer);
+          if (c) {
+            await this.addSuffix(c);
+          }
           break;
+        }
         default:
           if (s) {
             const lines = s.split(/\r\n|\n|\r/);
@@ -67,7 +80,7 @@ class IO {
                 const b = this.buffer;
                 this.buffer = '';
                 this.cursor = 0;
-                await onLine(b);
+                this.stdout.write(`${await onLine(b)}\n`);
                 this.paused = false;
                 await this.refresh();
               }
@@ -107,8 +120,13 @@ class IO {
     await this.refresh();
   }
 
-  async addSuffix(s) {
-    this.stdout.write(s);
+  async addSuffix(s = '') {
+    if (this.paused) {
+      return;
+    }
+    this.suffix = `${s}`;
+    this.stdout.write(this.suffix);
+    cursorTo(this.stdout, this.cursor + this.prefix.length);
   }
 
   async appendToBuffer(s) {
@@ -136,6 +154,7 @@ class IO {
     if (this.paused) {
       return;
     }
+    this.suffix = '';
     cursorTo(this.stdout, 0);
     this.stdout.write(CSI.kClearScreenDown);
     const b = this.transformBuffer ? await this.transformBuffer(this.buffer) : this.buffer;
