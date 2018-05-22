@@ -7,8 +7,14 @@ const vm = require('vm');
 
 const inspect = (v) => util.inspect(v, { colors: true });
 
-const simpleExpressionRE =
-    /(?:[a-zA-Z_$](?:\w|\$)*\.)*[a-zA-Z_$](?:\w|\$)*\.?$/;
+const simpleExpressionRE = /(?:[a-zA-Z_$](?:\w|\$)*\.)*[a-zA-Z_$](?:\w|\$)*\.?$/;
+
+const evil = (code) =>
+  new vm.Script(code, {
+    filename: 'repl',
+  }).runInThisContext({
+    displayErrors: true,
+  });
 
 class REPL {
   constructor(stdout, stdin) {
@@ -23,10 +29,15 @@ class REPL {
   }
 
   eval(code) {
-    return new vm.Script(code).runInThisContext({
-      filename: 'repl',
-      displayErrors: true,
-    });
+    const wrap = /^\s*\{.*?\}\s*$/.test(code);
+    try {
+      return evil(wrap ? `(${code})` : code);
+    } catch (err) {
+      if (wrap && err instanceof SyntaxError) {
+        return evil(code);
+      }
+      throw err;
+    }
   }
 
   async onLine(line) {
@@ -71,9 +82,7 @@ class REPL {
         }
         return keys;
       }
-    } catch (err) {
-      console.error('auticomplete error', err);
-    }
+    } catch {}
     return undefined;
   }
 }
