@@ -61,15 +61,17 @@ class IO {
           await this.moveCursor(-1);
           break;
         case 'tab': {
-          if (!completionList) {
-            completionList = await onAutocomplete(this.buffer);
-          }
-          if (completionList.length === 0) {
+          if (completionList && completionList.length) {
+            const next = completionList.shift();
+            await this.addSuffix(next);
+          } else if (completionList) {
             completionList = undefined;
             this.refresh();
           } else {
-            const next = completionList.shift();
-            await this.addSuffix(next);
+            const c = await onAutocomplete(this.buffer);
+            if (c) {
+              completionList = c;
+            }
           }
           break;
         }
