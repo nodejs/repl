@@ -14,11 +14,11 @@ class REPL {
   }
 
   async onLine(line) {
-    return eval(line);
+    return `${eval(line)}`;
   }
 
   async onAutocomplete(buffer) {
-    return [Math.random()];
+    return ['1', '2', '3', '4', `${buffer.length}`];
   }
 }
 

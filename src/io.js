@@ -15,12 +15,9 @@ class IO {
     this.suffix = '';
 
     this.paused = false;
-    this.queue = [];
-
-    stdout.setEncoding('utf8');
-
     this.transformBuffer = transformBuffer;
 
+    let completionList;
     let closeOnThisOne = false;
 
     const decoder = emitKeys(async (s, key) => {
@@ -64,13 +61,20 @@ class IO {
           await this.moveCursor(-1);
           break;
         case 'tab': {
-          const [c] = await onAutocomplete(this.buffer);
-          if (c) {
-            await this.addSuffix(c);
+          if (!completionList) {
+            completionList = await onAutocomplete(this.buffer);
+          }
+          if (completionList.length === 0) {
+            completionList = undefined;
+            this.refresh();
+          } else {
+            const next = completionList.shift();
+            await this.addSuffix(next);
           }
           break;
         }
         default:
+          completionList = undefined;
           if (s) {
             const lines = s.split(/\r\n|\n|\r/);
             for (let i = 0; i < lines.length; i += 1) {
@@ -93,6 +97,8 @@ class IO {
     });
 
     decoder.next('');
+
+    stdout.setEncoding('utf8');
 
     (async () => {
       stdin.setRawMode(true);
@@ -121,10 +127,11 @@ class IO {
   }
 
   async addSuffix(s = '') {
-    if (this.paused) {
+    if (this.paused || this.cursor !== this.buffer.length) {
       return;
     }
     this.suffix = `${s}`;
+    this.stdout.write(CSI.kClearScreenDown);
     this.stdout.write(this.suffix);
     cursorTo(this.stdout, this.cursor + this.prefix.length);
   }
