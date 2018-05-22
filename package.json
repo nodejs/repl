@@ -21,5 +21,9 @@
     "eslint-plugin-jsx-a11y": "^6.0.3",
     "eslint-plugin-react": "^7.8.2",
     "install-peerdeps": "^1.7.0"
+  },
+  "dependencies": {
+    "emphasize": "^2.0.0",
+    "highlight.js": "^9.12.0"
   }
 }

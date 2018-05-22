@@ -1,6 +1,7 @@
 'use strict';
 
 const IO = require('./io');
+const highlight = require('./highlight');
 
 class REPL {
   constructor(stdout, stdin) {
@@ -8,6 +9,7 @@ class REPL {
       stdout, stdin,
       this.onLine.bind(this),
       this.onAutocomplete.bind(this),
+      (s) => highlight(s),
     );
 
     this.io.setPrefix('> ');
