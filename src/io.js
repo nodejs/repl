@@ -81,13 +81,17 @@ class IO {
             const lines = s.split(/\r\n|\n|\r/);
             for (let i = 0; i < lines.length; i += 1) {
               if (i > 0) {
-                this.paused = true;
-                this.stdout.write('\n');
-                const b = this.buffer;
-                this.buffer = '';
-                this.cursor = 0;
-                this.stdout.write(`${await onLine(b)}\n`);
-                this.paused = false;
+                if (this.buffer) {
+                  this.paused = true;
+                  this.stdout.write('\n');
+                  const b = this.buffer;
+                  this.buffer = '';
+                  this.cursor = 0;
+                  this.stdout.write(`${await onLine(b)}\n`);
+                  this.paused = false;
+                } else {
+                  this.stdout.write('\n');
+                }
                 await this.refresh();
               }
               await this.appendToBuffer(lines[i]);
