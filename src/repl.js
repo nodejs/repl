@@ -38,6 +38,29 @@ const collectGlobalNames = async () => {
   return keys;
 };
 
+let _;
+let _err;
+Object.defineProperties(global, {
+  _: {
+    enumerable: false,
+    configurable: true,
+    get: () => _,
+    set: (v) => {
+      delete global._;
+      global._ = v;
+    },
+  },
+  _err: {
+    enumerable: false,
+    configurable: true,
+    get: () => _err,
+    set: (v) => {
+      delete global._err;
+      global._err = v;
+    },
+  },
+});
+
 class REPL {
   constructor(stdout, stdin) {
     this.io = new IO(
@@ -64,10 +87,10 @@ class REPL {
 
   async onLine(line) {
     try {
-      global._ = this.eval(line);
-      return inspect(global._);
+      _ = this.eval(line);
+      return inspect(_);
     } catch (err) {
-      global._err = err;
+      _err = err;
       return inspect(err, {});
     }
   }
