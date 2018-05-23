@@ -1,6 +1,7 @@
 'use strict';
 
 const { emitKeys, CSI, cursorTo } = require('./tty');
+const chalk = require('chalk');
 
 /* eslint-disable no-await-in-loop */
 
@@ -16,11 +17,13 @@ class IO {
 
     this.paused = false;
     this.transformBuffer = transformBuffer;
+    this.completionList = undefined;
+
+    this.onAutocomplete = onAutocomplete;
 
     this.history = [];
     this.history.index = -1;
 
-    let completionList;
     let closeOnThisOne = false;
 
     const decoder = emitKeys(async (s, key) => {
@@ -67,6 +70,7 @@ class IO {
         case 'right':
           if (this.cursor === this.buffer.length) {
             if (this.suffix) {
+              this.completionList = undefined;
               this.buffer += this.suffix;
               this.cursor += this.suffix.length;
               await this.refresh();
@@ -85,22 +89,10 @@ class IO {
           await this.moveCursor(-1);
           break;
         case 'tab': {
-          if (completionList && completionList.length) {
-            const next = completionList.shift();
-            await this.addSuffix(next);
-          } else if (completionList) {
-            completionList = undefined;
-            await this.refresh();
-          } else {
-            const c = await onAutocomplete(this.buffer);
-            if (c) {
-              completionList = c;
-            }
-          }
+          await this.autocomplete();
           break;
         }
         default:
-          completionList = undefined;
           if (s) {
             this.history.index = -1;
             const lines = s.split(/\r\n|\n|\r/);
@@ -151,6 +143,25 @@ class IO {
     });
   }
 
+  async autocomplete() {
+    if (!this.onAutocomplete) {
+      return;
+    }
+    if (this.completionList && this.completionList.length) {
+      const next = this.completionList.shift();
+      await this.addSuffix(next);
+    } else if (this.completionList) {
+      this.completionList = undefined;
+      await this.refresh(false);
+    } else {
+      const c = await this.onAutocomplete(this.buffer);
+      if (c) {
+        this.completionList = c;
+        await this.autocomplete();
+      }
+    }
+  }
+
   async setPrefix(s) {
     if (!s) {
       this.prefix = '';
@@ -165,7 +176,7 @@ class IO {
     }
     this.suffix = `${s}`;
     this.stdout.write(CSI.kClearScreenDown);
-    this.stdout.write(this.suffix);
+    this.stdout.write(chalk.grey(this.suffix));
     cursorTo(this.stdout, this.cursor + this.prefix.length);
   }
 
@@ -190,16 +201,20 @@ class IO {
     await this.refresh();
   }
 
-  async refresh() {
+  async refresh(complete = true) {
     if (this.paused) {
       return;
     }
+    this.completionList = undefined;
     this.suffix = '';
     cursorTo(this.stdout, 0);
     this.stdout.write(CSI.kClearScreenDown);
     const b = this.transformBuffer ? await this.transformBuffer(this.buffer) : this.buffer;
     this.stdout.write(this.prefix + b);
     cursorTo(this.stdout, this.cursor + this.prefix.length);
+    if (complete && this.buffer) {
+      await this.autocomplete();
+    }
   }
 }
 
