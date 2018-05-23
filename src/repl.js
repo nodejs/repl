@@ -6,7 +6,7 @@ const util = require('util');
 const vm = require('vm');
 const sendInspectorCommand = require('./inspector');
 
-const inspect = (v) => util.inspect(v, { colors: true });
+const inspect = (v) => util.inspect(v, { colors: true, depth: 1, maxArrayLength: 10 });
 
 const simpleExpressionRE = /(?:[a-zA-Z_$](?:\w|\$)*\.)*[a-zA-Z_$](?:\w|\$)*\.?$/;
 
