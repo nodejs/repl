@@ -34,9 +34,9 @@ const collectGlobalNames = async () => {
   const keys = Object.getOwnPropertyNames(global);
   try {
     keys.unshift(...await getGlobalLexicalScopeNames());
-  } catch {}
+  } catch (e) {} // eslint-disable-line no-empty
   return keys;
-}
+};
 
 class REPL {
   constructor(stdout, stdin) {
@@ -94,7 +94,7 @@ class REPL {
         if (expr === '') {
           keys = await collectGlobalNames();
         } else {
-          const o = this.eval(`try { ${expr} }catch (e) {}`);
+          const o = this.eval(`try { ${expr} } catch {}`);
 
           if (o) {
             keys = Object.getOwnPropertyNames(o);
@@ -112,7 +112,7 @@ class REPL {
         }
         return keys;
       }
-    } catch {}
+    } catch (e) {} // eslint-disable-line no-empty
     return undefined;
   }
 }

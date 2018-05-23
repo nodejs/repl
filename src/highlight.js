@@ -31,7 +31,7 @@ const sheet = {
   'meta keyword': chalk.magenta,
   'link': chalk.magenta,
 
-  'built_in': chalk.red,
+  'built_in': chalk.blue,
   'deletion': chalk.red,
 
   'emphasis': chalk.italic,
