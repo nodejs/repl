@@ -17,6 +17,9 @@ class IO {
     this.paused = false;
     this.transformBuffer = transformBuffer;
 
+    this.history = [];
+    this.history.index = -1;
+
     let completionList;
     let closeOnThisOne = false;
 
@@ -37,6 +40,27 @@ class IO {
       closeOnThisOne = false;
 
       switch (key.name) {
+        case 'up':
+          if (this.history.index >= this.history.length - 1) {
+            break;
+          }
+          this.history.index += 1;
+          this.buffer = this.history[this.history.index];
+          this.cursor = this.buffer.length;
+          await this.refresh();
+          break;
+        case 'down':
+          if (this.history.index <= 0) {
+            this.buffer = '';
+            this.cursor = 0;
+            await this.refresh();
+            break;
+          }
+          this.history.index -= 1;
+          this.buffer = this.history[this.history.index];
+          this.cursor = this.buffer.length;
+          await this.refresh();
+          break;
         case 'left':
           await this.moveCursor(-1);
           break;
@@ -45,7 +69,7 @@ class IO {
             if (this.suffix) {
               this.buffer += this.suffix;
               this.cursor += this.suffix.length;
-              this.refresh();
+              await this.refresh();
             }
             break;
           }
@@ -66,7 +90,7 @@ class IO {
             await this.addSuffix(next);
           } else if (completionList) {
             completionList = undefined;
-            this.refresh();
+            await this.refresh();
           } else {
             const c = await onAutocomplete(this.buffer);
             if (c) {
@@ -78,6 +102,7 @@ class IO {
         default:
           completionList = undefined;
           if (s) {
+            this.history.index = -1;
             const lines = s.split(/\r\n|\n|\r/);
             for (let i = 0; i < lines.length; i += 1) {
               if (i > 0) {
@@ -87,6 +112,7 @@ class IO {
                   const b = this.buffer;
                   this.buffer = '';
                   this.cursor = 0;
+                  this.history.unshift(b);
                   this.stdout.write(`${await onLine(b)}\n`);
                   this.paused = false;
                 } else {
@@ -119,7 +145,10 @@ class IO {
         stdin.once('data', handle);
       };
       stdin.once('data', handle);
-    })();
+    })().catch((err) => {
+      console.error(err); // eslint-disable-line no-console
+      process.reallyExit(1);
+    });
   }
 
   async setPrefix(s) {
