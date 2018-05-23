@@ -99,6 +99,7 @@ class IO {
             for (let i = 0; i < lines.length; i += 1) {
               if (i > 0) {
                 if (this.buffer) {
+                  await this.refresh(false);
                   this.paused = true;
                   this.stdout.write('\n');
                   const b = this.buffer;
