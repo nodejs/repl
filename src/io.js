@@ -6,7 +6,7 @@ const chalk = require('chalk');
 /* eslint-disable no-await-in-loop */
 
 class IO {
-  constructor(stdout, stdin, onLine, onAutocomplete, transformBuffer) {
+  constructor(stdout, stdin, onLine, onAutocomplete, transformBuffer, heading) {
     this.stdin = stdin;
     this.stdout = stdout;
 
@@ -25,6 +25,10 @@ class IO {
     this.history.index = -1;
 
     let closeOnThisOne = false;
+
+    stdin.cork();
+    this.clear();
+    stdout.write(`${heading}\n`);
 
     const decoder = emitKeys(async (s, key) => {
       if (key.ctrl) {

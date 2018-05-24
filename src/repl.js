@@ -69,9 +69,8 @@ class REPL {
       this.onLine.bind(this),
       this.onAutocomplete.bind(this),
       (s) => highlight(s),
+      `Node.js ${process.version} (V8 ${process.versions.v8})`,
     );
-
-    stdout.write(`Node.js ${process.version} (V8 ${process.versions.v8})\n`);
 
     this.io.setPrefix('> ');
   }
