@@ -27,45 +27,67 @@ class IO {
     let closeOnThisOne = false;
 
     const decoder = emitKeys(async (s, key) => {
-      if (key.ctrl || key.meta) {
-        if (key.name === 'd' || key.name === 'z') {
-          return -1;
-        }
-        if (key.name === 'c') {
-          if (closeOnThisOne) {
-            return -1;
-          }
-          this.stdout.write(`\n(To exit, press ^${key.name.toUpperCase()} again or call exit)\n`);
-          this.buffer = '';
-          this.cursor = 0;
-          closeOnThisOne = true;
-          return undefined;
-        }
-      }
-
-      closeOnThisOne = false;
-
-      switch (key.name) {
-        case 'up':
-          if (this.history.index >= this.history.length - 1) {
+      if (key.ctrl) {
+        switch (key.name) {
+          case 'h':
             break;
-          }
-          this.history.index += 1;
-          this.buffer = this.history[this.history.index];
-          this.cursor = this.buffer.length;
-          await this.refresh();
-          break;
-        case 'down':
-          if (this.history.index <= 0) {
-            this.buffer = '';
+          case 'u':
+            this.buffer = this.buffer.slice(this.cursor, this.buffer.length);
             this.cursor = 0;
             await this.refresh();
             break;
-          }
-          this.history.index -= 1;
-          this.buffer = this.history[this.history.index];
-          this.cursor = this.buffer.length;
-          await this.refresh();
+          case 'k':
+            this.buffer = this.buffer.slice(0, this.cursor);
+            this.cursor = this.buffer.length;
+            await this.refresh();
+            break;
+          case 'a':
+            await this.moveCursor(-Infinity);
+            break;
+          case 'e':
+            await this.moveCursor(Infinity);
+            break;
+          case 'b':
+            await this.moveCursor(-1);
+            break;
+          case 'f':
+            await this.moveCursor(1);
+            break;
+          case 'l':
+            cursorTo(stdout, 0, 0);
+            stdout.write(CSI.kClearScreenDown);
+            await this.refresh();
+            break;
+          case 'n':
+            await this.nextHistory();
+            break;
+          case 'p':
+            await this.previousHistory();
+            break;
+          case 'c':
+            if (closeOnThisOne) {
+              return -1;
+            }
+            this.stdout.write('\n(To exit, press ^C again or call exit)\n');
+            this.buffer = '';
+            this.cursor = 0;
+            closeOnThisOne = true;
+            return undefined;
+          case 'z':
+          case 'd':
+            return -1;
+          default:
+            break;
+        }
+        return undefined;
+      }
+
+      switch (key.name) {
+        case 'up':
+          await this.previousHistory();
+          break;
+        case 'down':
+          await this.nextHistory();
           break;
         case 'left':
           await this.moveCursor(-1);
@@ -164,6 +186,29 @@ class IO {
     this._paused = false;
   }
 
+  async nextHistory() {
+    if (this.history.index <= 0) {
+      this.buffer = '';
+      this.cursor = 0;
+      await this.refresh();
+      return;
+    }
+    this.history.index -= 1;
+    this.buffer = this.history[this.history.index];
+    this.cursor = this.buffer.length;
+    await this.refresh();
+  }
+
+  async previousHistory() {
+    if (this.history.index >= this.history.length - 1) {
+      return;
+    }
+    this.history.index += 1;
+    this.buffer = this.history[this.history.index];
+    this.cursor = this.buffer.length;
+    await this.refresh();
+  }
+
   async autocomplete() {
     if (!this.onAutocomplete) {
       return;
@@ -215,10 +260,14 @@ class IO {
   }
 
   async moveCursor(n) {
-    if ((this.cursor + n < 0) || (this.cursor + n > this.buffer.length)) {
-      return;
+    const c = this.cursor + n;
+    if (c < 0) {
+      this.cursor = 0;
+    } else if (c > this.buffer.length) {
+      this.cursor = this.buffer.length;
+    } else {
+      this.cursor = c;
     }
-    this.cursor += n;
     await this.refresh();
   }
 
