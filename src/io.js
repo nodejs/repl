@@ -15,7 +15,7 @@ class IO {
     this.prefix = '';
     this.suffix = '';
 
-    this.paused = false;
+    this._paused = false;
     this.transformBuffer = transformBuffer;
     this.completionList = undefined;
 
@@ -28,7 +28,10 @@ class IO {
 
     const decoder = emitKeys(async (s, key) => {
       if (key.ctrl || key.meta) {
-        if (key.name === 'c' || key.name === 'd') {
+        if (key.name === 'd' || key.name === 'z') {
+          return -1;
+        }
+        if (key.name === 'c') {
           if (closeOnThisOne) {
             return -1;
           }
@@ -100,14 +103,14 @@ class IO {
               if (i > 0) {
                 if (this.buffer) {
                   await this.refresh(false);
-                  this.paused = true;
+                  this.pause();
                   this.stdout.write('\n');
                   const b = this.buffer;
                   this.buffer = '';
                   this.cursor = 0;
                   this.history.unshift(b);
                   this.stdout.write(`${await onLine(b)}\n`);
-                  this.paused = false;
+                  this.unpause();
                 } else {
                   this.stdout.write('\n');
                 }
@@ -126,8 +129,11 @@ class IO {
     stdout.setEncoding('utf8');
 
     (async () => {
-      stdin.setRawMode(true);
+      if (stdin.setRawMode) {
+        stdin.setRawMode(true);
+      }
       stdin.setEncoding('utf8');
+      this.unpause();
       const handle = async (data) => {
         for (let i = 0; i < data.length; i += 1) {
           const { value } = await decoder.next(data[i]);
@@ -142,6 +148,20 @@ class IO {
       console.error(err); // eslint-disable-line no-console
       process.reallyExit(1);
     });
+  }
+
+  get paused() {
+    return this._paused;
+  }
+
+  pause() {
+    this._paused = true;
+    this.stdin.cork();
+  }
+
+  unpause() {
+    this.stdin.uncork();
+    this._paused = false;
   }
 
   async autocomplete() {
@@ -202,14 +222,18 @@ class IO {
     await this.refresh();
   }
 
+  clear() {
+    cursorTo(this.stdout, 0);
+    this.stdout.write(CSI.kClearScreenDown);
+  }
+
   async refresh(complete = true) {
     if (this.paused) {
       return;
     }
     this.completionList = undefined;
     this.suffix = '';
-    cursorTo(this.stdout, 0);
-    this.stdout.write(CSI.kClearScreenDown);
+    this.clear();
     const b = this.transformBuffer ? await this.transformBuffer(this.buffer) : this.buffer;
     this.stdout.write(this.prefix + b);
     cursorTo(this.stdout, this.cursor + this.prefix.length);

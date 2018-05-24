@@ -15,6 +15,7 @@ const evil = (code) =>
     filename: 'repl',
   }).runInThisContext({
     displayErrors: true,
+    breakOnSigint: true,
   });
 
 const getGlobalLexicalScopeNames = (contextId) =>
@@ -34,7 +35,7 @@ const collectGlobalNames = async () => {
   const keys = Object.getOwnPropertyNames(global);
   try {
     keys.unshift(...await getGlobalLexicalScopeNames());
-  } catch (e) {} // eslint-disable-line no-empty
+  } catch {} // eslint-disable-line no-empty
   return keys;
 };
 
@@ -69,6 +70,8 @@ class REPL {
       this.onAutocomplete.bind(this),
       (s) => highlight(s),
     );
+
+    stdout.write(`Node.js ${process.version} (V8 ${process.versions.v8})\n`);
 
     this.io.setPrefix('> ');
   }
@@ -135,7 +138,7 @@ class REPL {
         }
         return keys;
       }
-    } catch (e) {} // eslint-disable-line no-empty
+    } catch {} // eslint-disable-line no-empty
     return undefined;
   }
 }
