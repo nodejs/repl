@@ -7,9 +7,9 @@ const vm = require('vm');
 const sendInspectorCommand = require('./inspector');
 
 const inspect = (v) => util.inspect(v, { colors: true, depth: 2 });
-
 const simpleExpressionRE = /(?:[a-zA-Z_$](?:\w|\$)*\.)*[a-zA-Z_$](?:\w|\$)*\.?$/;
 
+// TODO: switch to Runtime.evaluate with side effect control
 const evil = (code) =>
   new vm.Script(code, {
     filename: 'repl',
@@ -41,6 +41,8 @@ const collectGlobalNames = async () => {
 
 let _;
 let _err;
+
+// TODO: scope this
 Object.defineProperties(global, {
   _: {
     enumerable: false,
@@ -119,7 +121,7 @@ class REPL {
         if (expr === '') {
           keys = await collectGlobalNames();
         } else {
-          const o = this.eval(`try { ${expr} } catch (e) {}`);
+          const o = evil(`try { ${expr} } catch (e) {}`, true);
 
           if (o) {
             keys = Object.getOwnPropertyNames(o);

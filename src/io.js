@@ -166,13 +166,14 @@ class IO {
           if (value === -1) {
             process.exit(0);
           }
+          process._tickCallback();
         }
         stdin.once('data', handle);
       };
       stdin.once('data', handle);
     })().catch((err) => {
       console.error(err); // eslint-disable-line no-console
-      process.reallyExit(1);
+      process.exit(1);
     });
   }
 
