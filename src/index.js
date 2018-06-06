@@ -2,6 +2,7 @@
 
 const REPL = require('./repl');
 const Module = require('module');
+const util = require('util');
 
 const builtinLibs = Module.builtinModules.filter((x) => !/^_|\//.test(x));
 
@@ -33,5 +34,19 @@ builtinLibs.forEach((name) => {
 const m = new Module(process.cwd());
 m._compile('module.exports = require', process.cwd());
 global.require = m.exports;
+
+global.REPL = {
+  time: (fn) => {
+    const { Suite } = require('benchmark');
+    let r;
+    new Suite().add(fn.name, fn)
+      .on('cycle', (event) => {
+        r = event.target;
+        r[util.inspect.custom] = () => String(r);
+      })
+      .run();
+    return r;
+  },
+};
 
 new REPL(process.stdout, process.stdin); // eslint-disable-line no-new

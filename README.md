@@ -10,5 +10,5 @@ Goals:
   - Benchmarking
 - Pretty UI
   - Highlight output *and* input
-  - curses-style dropdown for autocomplete
+  - autocomplete
 - Keep the code neat for future changes
