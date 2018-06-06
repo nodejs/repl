@@ -3,28 +3,30 @@
 const hasInspector = process.config.variables.v8_enable_inspector === 1;
 const inspector = hasInspector ? require('inspector') : undefined;
 
-let session;
 
-function sendInspectorCommand(cb) {
-  return new Promise((resolve, reject) => {
-    if (!hasInspector) {
-      reject(new Error('no inspector'));
-      return;
-    }
-    if (session === undefined) {
-      session = new inspector.Session();
-    }
-    try {
-      session.connect();
-      try {
-        resolve(cb(session));
-      } finally {
-        session.disconnect();
-      }
-    } catch (e) {
-      reject(e);
-    }
-  });
+if (!hasInspector) {
+  throw new Error('no inspector');
 }
 
-module.exports = sendInspectorCommand;
+const session = new inspector.Session();
+session.connect();
+
+const makeProxy = (name) => new Proxy({}, {
+  get: (target, method) => {
+    const n = `${name}.${method}`;
+    return (params = {}) => {
+      let r;
+      session.post(n, params, (err, result) => {
+        if (err) {
+          throw new Error(err.message);
+        }
+        r = result;
+      });
+      return r;
+    };
+  },
+});
+
+module.exports = {
+  Runtime: makeProxy('Runtime'),
+};

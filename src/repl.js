@@ -2,67 +2,30 @@
 
 const IO = require('./io');
 const highlight = require('./highlight');
-const util = require('util');
-const vm = require('vm');
-const sendInspectorCommand = require('./inspector');
+const { Runtime } = require('./inspector');
 
-const inspect = (v) => util.inspect(v, { colors: true, depth: 2 });
 const simpleExpressionRE = /(?:[a-zA-Z_$](?:\w|\$)*\.)*[a-zA-Z_$](?:\w|\$)*\.?$/;
 
-// TODO: switch to Runtime.evaluate with side effect control
-const evil = (code) =>
-  new vm.Script(code, {
-    filename: 'repl',
-  }).runInThisContext({
-    displayErrors: true,
-    breakOnSigint: true,
+const evil = (expression) => {
+  const { exceptionDetails, result } = Runtime.evaluate({
+    expression: `require('util').inspect(${expression}, { colors: true, depth: 2 })`,
+    generatePreview: true,
   });
 
-const getGlobalLexicalScopeNames = (contextId) =>
-  sendInspectorCommand((session) => {
-    let names = [];
-    session.post('Runtime.globalLexicalScopeNames', {
-      executionContextId: contextId,
-    }, (error, result) => {
-      if (!error) {
-        ({ names } = result);
-      }
-    });
-    return names;
-  });
+  if (exceptionDetails) {
+    return exceptionDetails.exception.description.replace(/ {4}/g, '  ');
+  }
 
-const collectGlobalNames = async () => {
+  return result.value;
+};
+
+const collectGlobalNames = () => {
   const keys = Object.getOwnPropertyNames(global);
   try {
-    keys.unshift(...await getGlobalLexicalScopeNames());
+    keys.unshift(...Runtime.globalLexicalScopeNames().name);
   } catch (e) {} // eslint-disable-line no-empty
   return keys;
 };
-
-let _;
-let _err;
-
-// TODO: scope this
-Object.defineProperties(global, {
-  _: {
-    enumerable: false,
-    configurable: true,
-    get: () => _,
-    set: (v) => {
-      delete global._;
-      global._ = v;
-    },
-  },
-  _err: {
-    enumerable: false,
-    configurable: true,
-    get: () => _err,
-    set: (v) => {
-      delete global._err;
-      global._err = v;
-    },
-  },
-});
 
 class REPL {
   constructor(stdout, stdin) {
@@ -90,13 +53,7 @@ class REPL {
   }
 
   async onLine(line) {
-    try {
-      _ = this.eval(line);
-      return inspect(_);
-    } catch (err) {
-      _err = err;
-      return inspect(err, {});
-    }
+    return this.eval(line);
   }
 
   async onAutocomplete(buffer) {
@@ -119,16 +76,17 @@ class REPL {
         }
 
         if (expr === '') {
-          keys = await collectGlobalNames();
+          keys = collectGlobalNames();
         } else {
-          const o = evil(`try { ${expr} } catch (e) {}`, true);
-
-          if (o) {
-            keys = Object.getOwnPropertyNames(o);
-          }
+          keys = Runtime.evaluate({
+            expression: `Object.keys(Object.getOwnPropertyDescriptors(${expr}))`,
+            throwOnSideEffect: true,
+            generatePreview: true,
+          }).result.preview.properties
+            .map(({ value }) => value);
         }
       } else if (buffer.length === 0) {
-        keys = await collectGlobalNames();
+        keys = collectGlobalNames();
       }
 
       if (keys) {
