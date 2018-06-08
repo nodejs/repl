@@ -2,27 +2,37 @@
 
 const IO = require('./io');
 const highlight = require('./highlight');
+const util = require('util');
 const { Runtime } = require('./inspector');
 
-const simpleExpressionRE = /(?:[a-zA-Z_$](?:\w|\$)*\.)*[a-zA-Z_$](?:\w|\$)*\.?$/;
+const simpleExpressionRE = /(?:[a-zA-Z_$](?:\w|\$)*\.)*[a-zA-Z_$](?:\w|\$)*[.[]?$/;
+const inspect = (v) => util.inspect(v, { colors: true, depth: 2 });
 
 const evil = (expression) => {
-  const { exceptionDetails, result } = Runtime.evaluate({
-    expression: `require('util').inspect(${expression}, { colors: true, depth: 2 })`,
+  const { result } = Runtime.evaluate({
+    expression: `try {
+  global.REPL._ = ${expression};
+  1;
+} catch (err) {
+  global.REPL._err = err;
+  2;
+}`,
     generatePreview: true,
   });
 
-  if (exceptionDetails) {
-    return exceptionDetails.exception.description.replace(/ {4}/g, '  ');
+  if (result.value === 1) {
+    return inspect(global.REPL._);
+  } else if (result.value === 2) {
+    return inspect(global.REPL._err);
   }
 
-  return result.value;
+  return '';
 };
 
 const collectGlobalNames = () => {
   const keys = Object.getOwnPropertyNames(global);
   try {
-    keys.unshift(...Runtime.globalLexicalScopeNames().name);
+    keys.unshift(...Runtime.globalLexicalScopeNames().names);
   } catch (e) {} // eslint-disable-line no-empty
   return keys;
 };
@@ -60,7 +70,8 @@ class REPL {
     try {
       let filter;
       let keys;
-      if (/\w|\.|\$/.test(buffer)) {
+      let computed = false;
+      if (/\w|[.[]|\$/.test(buffer)) {
         let expr;
         const match = simpleExpressionRE.exec(buffer);
         if (buffer.length === 0) {
@@ -68,6 +79,10 @@ class REPL {
           expr = '';
         } else if (buffer[buffer.length - 1] === '.') {
           filter = '';
+          expr = match[0].slice(0, match[0].length - 1);
+        } else if (buffer[buffer.length - 1] === '[') {
+          filter = '';
+          computed = true;
           expr = match[0].slice(0, match[0].length - 1);
         } else {
           const bits = match[0].split('.');
@@ -78,12 +93,20 @@ class REPL {
         if (expr === '') {
           keys = collectGlobalNames();
         } else {
-          keys = Runtime.evaluate({
+          const k = Runtime.evaluate({
             expression: `Object.keys(Object.getOwnPropertyDescriptors(${expr}))`,
-            throwOnSideEffect: true,
+            // throwOnSideEffect: true,
             generatePreview: true,
-          }).result.preview.properties
-            .map(({ value }) => value);
+          }).result.preview.properties;
+
+          if (computed) {
+            keys = k.map(({ value }) =>
+              (computed ? `'${value.replace(/(^')|([^\\]')/, '\\\'')}']` : value));
+          } else {
+            keys = k
+              .filter(({ value }) => !/[\x00-\x1f\x27\x5c ]/.test(value)) // eslint-disable-line no-control-regex
+              .map(({ value }) => value);
+          }
         }
       } else if (buffer.length === 0) {
         keys = collectGlobalNames();

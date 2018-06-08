@@ -47,6 +47,30 @@ global.REPL = {
       .run();
     return r;
   },
+  _: undefined,
+  _err: undefined,
 };
+
+// TODO: scope this
+Object.defineProperties(global, {
+  _: {
+    enumerable: false,
+    configurable: true,
+    get: () => global.REPL._,
+    set: (v) => {
+      delete global._;
+      global._ = v;
+    },
+  },
+  _err: {
+    enumerable: false,
+    configurable: true,
+    get: () => global.REPL._err,
+    set: (v) => {
+      delete global._err;
+      global._err = v;
+    },
+  },
+});
 
 new REPL(process.stdout, process.stdin); // eslint-disable-line no-new
