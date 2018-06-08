@@ -4,6 +4,7 @@ const IO = require('./io');
 const highlight = require('./highlight');
 const util = require('util');
 const { Runtime } = require('./inspector');
+const { strEscape } = require('./util');
 
 const simpleExpressionRE = /(?:[a-zA-Z_$](?:\w|\$)*\.)*[a-zA-Z_$](?:\w|\$)*[.[]?$/;
 const inspect = (v) => util.inspect(v, { colors: true, depth: 2 });
@@ -100,8 +101,7 @@ class REPL {
           }).result.preview.properties;
 
           if (computed) {
-            keys = k.map(({ value }) =>
-              (computed ? `'${value.replace(/(^')|([^\\]')/, '\\\'')}']` : value));
+            keys = k.map(({ value }) => `${strEscape(value)}]`);
           } else {
             keys = k
               .filter(({ value }) => !/[\x00-\x1f\x27\x5c ]/.test(value)) // eslint-disable-line no-control-regex
