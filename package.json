@@ -2,6 +2,7 @@
   "name": "repl-prototype",
   "description": "REPL Prototype",
   "main": "src/index.js",
+  "license": "MIT",
   "scripts": {
     "lint": "eslint src"
   },
