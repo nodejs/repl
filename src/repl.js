@@ -10,6 +10,7 @@ const vm = require('vm');
 const simpleExpressionRE = /(?:[a-zA-Z_$](?:\w|\$)*\.)*[a-zA-Z_$](?:\w|\$)*[.[]?$/;
 const inspect = (v) => util.inspect(v, { colors: true, depth: 2 });
 
+// TODO: use Runtime.evaluate
 const evil = (expression) =>
   new vm.Script(expression, {
     filename: 'repl',
@@ -88,6 +89,7 @@ class REPL {
         if (expr === '') {
           keys = collectGlobalNames();
         } else {
+          // TODO: figure out throwOnSideEffect
           const k = Runtime.evaluate({
             expression: `Object.keys(Object.getOwnPropertyDescriptors(${expr}))`,
             // throwOnSideEffect: true,
