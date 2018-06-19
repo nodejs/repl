@@ -2,33 +2,21 @@
 
 const IO = require('./io');
 const highlight = require('./highlight');
-const util = require('util');
 const { Runtime } = require('./inspector');
 const { strEscape } = require('./util');
+const util = require('util');
+const vm = require('vm');
 
 const simpleExpressionRE = /(?:[a-zA-Z_$](?:\w|\$)*\.)*[a-zA-Z_$](?:\w|\$)*[.[]?$/;
 const inspect = (v) => util.inspect(v, { colors: true, depth: 2 });
 
-const evil = (expression) => {
-  const { result } = Runtime.evaluate({
-    expression: `try {
-  global.REPL._ = ${expression};
-  1;
-} catch (err) {
-  global.REPL._err = err;
-  2;
-}`,
-    generatePreview: true,
+const evil = (expression) =>
+  new vm.Script(expression, {
+    filename: 'repl',
+  }).runInThisContext({
+    displayErrors: true,
+    breakOnSigint: true,
   });
-
-  if (result.value === 1) {
-    return inspect(global.REPL._);
-  } else if (result.value === 2) {
-    return inspect(global.REPL._err);
-  }
-
-  return '';
-};
 
 const collectGlobalNames = () => {
   const keys = Object.getOwnPropertyNames(global);
@@ -64,7 +52,13 @@ class REPL {
   }
 
   async onLine(line) {
-    return this.eval(line);
+    try {
+      global.REPL.last = this.eval(line);
+      return inspect(global.REPL.last);
+    } catch (err) {
+      global.REPL.lastError = err;
+      return inspect(err);
+    }
   }
 
   async onAutocomplete(buffer) {

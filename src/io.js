@@ -1,7 +1,6 @@
 'use strict';
 
 const { emitKeys, CSI, cursorTo } = require('./tty');
-const chalk = require('chalk');
 
 /* eslint-disable no-await-in-loop */
 
@@ -247,7 +246,7 @@ class IO {
     }
     this.suffix = `${s}`;
     this.stdout.write(CSI.kClearScreenDown);
-    this.stdout.write(chalk.grey(this.suffix));
+    this.stdout.write(`\u001b[90m${this.suffix}\u001b[39m`);
     cursorTo(this.stdout, this.cursor + this.prefix.length);
   }
 

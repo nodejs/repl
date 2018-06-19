@@ -47,8 +47,8 @@ global.REPL = {
       .run();
     return r;
   },
-  _: undefined,
-  _err: undefined,
+  last: undefined,
+  lastError: undefined,
 };
 
 // TODO: scope this
@@ -56,7 +56,7 @@ Object.defineProperties(global, {
   _: {
     enumerable: false,
     configurable: true,
-    get: () => global.REPL._,
+    get: () => global.REPL.last,
     set: (v) => {
       delete global._;
       global._ = v;
@@ -65,7 +65,7 @@ Object.defineProperties(global, {
   _err: {
     enumerable: false,
     configurable: true,
-    get: () => global.REPL._err,
+    get: () => global.REPL.lastError,
     set: (v) => {
       delete global._err;
       global._err = v;
