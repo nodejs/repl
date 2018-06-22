@@ -19,13 +19,13 @@ const evil = (expression) =>
     breakOnSigint: true,
   });
 
-const collectGlobalNames = () => {
+async function collectGlobalNames() {
   const keys = Object.getOwnPropertyNames(global);
   try {
-    keys.unshift(...Runtime.globalLexicalScopeNames().names);
+    keys.unshift(...await Runtime.globalLexicalScopeNames().names);
   } catch (e) {} // eslint-disable-line no-empty
   return keys;
-};
+}
 
 class REPL {
   constructor(stdout, stdin) {
@@ -87,14 +87,14 @@ class REPL {
         }
 
         if (expr === '') {
-          keys = collectGlobalNames();
+          keys = await collectGlobalNames();
         } else {
           // TODO: figure out throwOnSideEffect
-          const k = Runtime.evaluate({
+          const k = (await Runtime.evaluate({
             expression: `Object.keys(Object.getOwnPropertyDescriptors(${expr}))`,
             // throwOnSideEffect: true,
             generatePreview: true,
-          }).result.preview.properties;
+          })).result.preview.properties;
 
           if (computed) {
             keys = k.map(({ value }) => `${strEscape(value)}]`);
@@ -105,7 +105,7 @@ class REPL {
           }
         }
       } else if (buffer.length === 0) {
-        keys = collectGlobalNames();
+        keys = await collectGlobalNames();
       }
 
       if (keys) {
