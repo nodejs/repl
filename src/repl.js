@@ -53,12 +53,13 @@ class REPL {
     this.io.setPrefix('> ');
   }
 
-  async eval(code, awaitPromise = false) {
+  async eval(code, awaitPromise = false, throwOnSideEffect = false) {
     const expression = wrapObjectLiteralExpressionIfNeeded(code);
     return Runtime.evaluate({
       expression,
       generatePreview: true,
       awaitPromise,
+      throwOnSideEffect,
       executionContextId: await mainContextIdPromise,
     });
   }
@@ -127,19 +128,21 @@ class REPL {
         if (expr === '') {
           keys = await collectGlobalNames();
         } else {
-          // TODO: figure out throwOnSideEffect
-          const k = (await Runtime.evaluate({
-            expression: `Object.keys(Object.getOwnPropertyDescriptors(${expr}))`,
-            // throwOnSideEffect: true,
+          const evaluateResult = await this.eval(expr, false, true);
+          if (evaluateResult.exceptionDetails) {
+            return undefined;
+          }
+
+          const k = (await Runtime.getProperties({
+            objectId: evaluateResult.result.objectId,
+            ownProperties: true,
             generatePreview: true,
-          })).result.preview.properties;
+          })).result.map(({ name }) => name);
 
           if (computed) {
-            keys = k.map(({ value }) => `${strEscape(value)}]`);
+            keys = k.map((key) => `${strEscape(key)}]`);
           } else {
-            keys = k
-              .filter(({ value }) => !/[\x00-\x1f\x27\x5c ]/.test(value)) // eslint-disable-line no-control-regex
-              .map(({ value }) => value);
+            keys = k.filter((key) => !/[\x00-\x1f\x27\x5c ]/.test(key)); // eslint-disable-line no-control-regex
           }
         }
       } else if (buffer.length === 0) {
