@@ -1,31 +1,38 @@
 'use strict';
 
-const hasInspector = process.config.variables.v8_enable_inspector === 1;
-const inspector = hasInspector ? require('inspector') : undefined;
+let inspector;
 
-
-if (!hasInspector) {
-  throw new Error('no inspector');
+try {
+  inspector = require('inspector');
+} catch (err) {
+  module.exports = {};
+  return;
 }
 
 const session = new inspector.Session();
 session.connect();
 
-const makeProxy = (name) => new Proxy({}, {
-  get: (target, method) => {
-    const n = `${name}.${method}`;
-    return (params = {}) => {
-      let r;
-      session.post(n, params, (err, result) => {
-        if (err) {
-          throw new Error(err.message);
-        }
-        r = result;
+function makeProxy(name) {
+  return new Proxy({ cache: new Map() }, {
+    get({ cache }, method) {
+      const n = `${name}.${method}`;
+      if (cache.has(n)) {
+        return cache.get(n);
+      }
+      const func = (params = {}) => new Promise((resolve, reject) => {
+        session.post(n, params, (err, result) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve(result);
+        });
       });
-      return r;
-    };
-  },
-});
+      cache.set(n, func);
+      return func;
+    },
+  });
+}
 
 module.exports = {
   Runtime: makeProxy('Runtime'),
