@@ -7,7 +7,6 @@ const { Runtime, mainContextIdPromise } = require('./inspector');
 const { strEscape } = require('./util');
 const util = require('util');
 
-const simpleExpressionRE = /(?:[a-zA-Z_$](?:\w|\$)*\.)*[a-zA-Z_$](?:\w|\$)*[.[]?$/;
 const inspect = (v) => util.inspect(v, { colors: true, depth: 2 });
 
 // https://cs.chromium.org/chromium/src/third_party/blink/renderer/devtools/front_end/sdk/RuntimeModel.js?l=60-78&rcl=faa083eea5586885cc907ae28928dd766e47b6fa
@@ -102,62 +101,51 @@ class REPL {
   }
 
   async onAutocomplete(buffer) {
-    try {
-      let filter;
-      let keys;
+    let keys;
+    let filter;
+    if (buffer.length === 0) {
+      keys = await collectGlobalNames();
+    } else {
+      let expr;
       let computed = false;
-      if (/\w|[.[]|\$/.test(buffer)) {
-        let expr;
-        const match = simpleExpressionRE.exec(buffer);
-        if (buffer.length === 0) {
-          filter = '';
-          expr = '';
-        } else if (buffer[buffer.length - 1] === '.') {
-          filter = '';
-          expr = match[0].slice(0, match[0].length - 1);
-        } else if (buffer[buffer.length - 1] === '[') {
-          filter = '';
-          computed = true;
-          expr = match[0].slice(0, match[0].length - 1);
-        } else {
-          const bits = match[0].split('.');
-          filter = bits.pop();
-          expr = bits.join('.');
-        }
-
-        if (expr === '') {
-          keys = await collectGlobalNames();
-        } else {
-          const evaluateResult = await this.eval(expr, false, true);
-          if (evaluateResult.exceptionDetails) {
-            return undefined;
-          }
-
-          const k = (await Runtime.getProperties({
-            objectId: evaluateResult.result.objectId,
-            ownProperties: true,
-            generatePreview: true,
-          })).result.map(({ name }) => name);
-
-          if (computed) {
-            keys = k.map((key) => `${strEscape(key)}]`);
-          } else {
-            keys = k.filter((key) => !/[\x00-\x1f\x27\x5c ]/.test(key)); // eslint-disable-line no-control-regex
-          }
-        }
-      } else if (buffer.length === 0) {
-        keys = await collectGlobalNames();
+      if (/\['$/.test(buffer)) {
+        ([expr, filter] = buffer.split(/\['/));
+        computed = true;
       }
 
-      if (keys) {
-        if (filter) {
-          return keys
-            .filter((k) => k.startsWith(filter))
-            .map((k) => k.slice(filter.length));
-        }
-        return keys;
+      if (/\.$/.test(buffer)) {
+        ([expr, filter] = buffer.split(/\.$/));
+        computed = false;
       }
-    } catch (e) {} // eslint-disable-line no-empty
+
+      if (expr) {
+        const evaluateResult = await this.eval(expr, false, true);
+        if (evaluateResult.exceptionDetails) {
+          return undefined;
+        }
+
+        const k = (await Runtime.getProperties({
+          objectId: evaluateResult.result.objectId,
+          ownProperties: true,
+          generatePreview: true,
+        })).result.map(({ name }) => name);
+
+        if (computed) {
+          keys = k.map((key) => `${strEscape(key)}]`);
+        } else {
+          keys = k.filter((key) => !/[\x00-\x1f\x27\x5c ]|^\d/.test(key)); // eslint-disable-line no-control-regex
+        }
+      }
+    }
+
+    if (keys) {
+      if (filter) {
+        return keys
+          .filter((k) => k.startsWith(filter))
+          .map((k) => k.slice(filter.length));
+      }
+      return keys;
+    }
     return undefined;
   }
 }
