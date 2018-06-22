@@ -24,6 +24,7 @@
     "install-peerdeps": "^1.7.0"
   },
   "dependencies": {
+    "acorn": "^5.7.1",
     "benchmark": "^2.1.4",
     "chalk": "^2.4.1",
     "emphasize": "^2.0.0"

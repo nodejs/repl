@@ -2,6 +2,7 @@
 
 const IO = require('./io');
 const highlight = require('./highlight');
+const { processTopLevelAwait } = require('./await');
 const { Runtime, mainContextIdPromise } = require('./inspector');
 const { strEscape } = require('./util');
 const util = require('util');
@@ -52,11 +53,13 @@ class REPL {
     this.io.setPrefix('> ');
   }
 
-  eval(code) {
+  async eval(code, awaitPromise = false) {
     const expression = wrapObjectLiteralExpressionIfNeeded(code);
     return Runtime.evaluate({
       expression,
       generatePreview: true,
+      awaitPromise,
+      executionContextId: await mainContextIdPromise,
     });
   }
 
@@ -69,7 +72,16 @@ class REPL {
   }
 
   async onLine(line) {
-    const evaluateResult = await this.eval(line);
+    let awaited = false;
+    if (line.includes('await')) {
+      const processed = processTopLevelAwait(line);
+      if (processed !== null) {
+        line = processed;
+        awaited = true;
+      }
+    }
+    const evaluateResult = await this.eval(line, awaited);
+
     if (evaluateResult.exceptionDetails) {
       await this.callFunctionOn(
         (err) => {
