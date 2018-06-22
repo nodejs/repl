@@ -108,14 +108,31 @@ class REPL {
     } else {
       let expr;
       let computed = false;
-      if (/\['$/.test(buffer)) {
-        ([expr, filter] = buffer.split(/\['/));
-        computed = true;
+      let leadingQuote = false;
+
+      let index = buffer.lastIndexOf('.');
+      if (index !== -1) {
+        expr = buffer.slice(0, index);
+        filter = buffer.slice(index + 1, buffer.length);
       }
 
-      if (/\.$/.test(buffer)) {
-        ([expr, filter] = buffer.split(/\.$/));
-        computed = false;
+      if (!expr) {
+        index = buffer.lastIndexOf('[\'');
+        if (index !== -1) {
+          expr = buffer.slice(0, index);
+          filter = buffer.slice(index + 2, buffer.length);
+          computed = true;
+          leadingQuote = true;
+        }
+      }
+
+      if (!expr) {
+        index = buffer.lastIndexOf('[');
+        if (index !== -1) {
+          expr = buffer.slice(0, index);
+          filter = buffer.slice(index + 1, buffer.length);
+          computed = true;
+        }
       }
 
       if (expr) {
@@ -131,7 +148,13 @@ class REPL {
         })).result.map(({ name }) => name);
 
         if (computed) {
-          keys = k.map((key) => `${strEscape(key)}]`);
+          keys = k.map((key) => {
+            const r = `${strEscape(key)}]`;
+            if (leadingQuote) {
+              return r.slice(1);
+            }
+            return r;
+          });
         } else {
           keys = k.filter((key) => !/[\x00-\x1f\x27\x5c ]|^\d/.test(key)); // eslint-disable-line no-control-regex
         }
