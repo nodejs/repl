@@ -144,7 +144,10 @@ class REPL {
         const k = (await Runtime.getProperties({
           objectId: evaluateResult.result.objectId,
           generatePreview: true,
-        })).result.map(({ name }) => name);
+        })).result
+          .filter(({ symbol }) => !symbol)
+          .sort((a, b) => (a.isOwn === b.isOwn ? 1 : -1))
+          .map(({ name }) => name);
 
         if (computed) {
           keys = k.map((key) => {
