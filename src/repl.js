@@ -2,22 +2,34 @@
 
 const IO = require('./io');
 const highlight = require('./highlight');
-const { Runtime } = require('./inspector');
+const { Runtime, mainContextIdPromise } = require('./inspector');
 const { strEscape } = require('./util');
 const util = require('util');
-const vm = require('vm');
 
 const simpleExpressionRE = /(?:[a-zA-Z_$](?:\w|\$)*\.)*[a-zA-Z_$](?:\w|\$)*[.[]?$/;
 const inspect = (v) => util.inspect(v, { colors: true, depth: 2 });
 
-// TODO: use Runtime.evaluate
-const evil = (expression) =>
-  new vm.Script(expression, {
-    filename: 'repl',
-  }).runInThisContext({
-    displayErrors: true,
-    breakOnSigint: true,
-  });
+// https://cs.chromium.org/chromium/src/third_party/blink/renderer/devtools/front_end/sdk/RuntimeModel.js?l=60-78&rcl=faa083eea5586885cc907ae28928dd766e47b6fa
+function wrapObjectLiteralExpressionIfNeeded(code) {
+  // Only parenthesize what appears to be an object literal.
+  if (!(/^\s*\{/.test(code) && /\}\s*$/.test(code))) {
+    return code;
+  }
+
+  const parse = (async () => 0).constructor;
+  try {
+    // Check if the code can be interpreted as an expression.
+    parse(`return ${code};`);
+
+    // No syntax error! Does it work parenthesized?
+    const wrappedCode = `(${code})`;
+    parse(wrappedCode);
+
+    return wrappedCode;
+  } catch (e) {
+    return code;
+  }
+}
 
 async function collectGlobalNames() {
   const keys = Object.getOwnPropertyNames(global);
@@ -41,25 +53,39 @@ class REPL {
   }
 
   eval(code) {
-    const wrap = /^\s*\{.*?\}\s*$/.test(code);
-    try {
-      return evil(wrap ? `(${code})` : code);
-    } catch (err) {
-      if (wrap && err instanceof SyntaxError) {
-        return evil(code);
-      }
-      throw err;
-    }
+    const expression = wrapObjectLiteralExpressionIfNeeded(code);
+    return Runtime.evaluate({
+      expression,
+      generatePreview: true,
+    });
+  }
+
+  async callFunctionOn(func, remoteObject) {
+    return Runtime.callFunctionOn({
+      functionDeclaration: func.toString(),
+      arguments: [remoteObject],
+      executionContextId: await mainContextIdPromise,
+    });
   }
 
   async onLine(line) {
-    try {
-      global.REPL.last = this.eval(line);
-      return inspect(global.REPL.last);
-    } catch (err) {
-      global.REPL.lastError = err;
-      return inspect(err);
+    const evaluateResult = await this.eval(line);
+    if (evaluateResult.exceptionDetails) {
+      await this.callFunctionOn(
+        (err) => {
+          global.REPL.lastError = err;
+        },
+        evaluateResult.exceptionDetails.exception,
+      );
+      return inspect(global.REPL.lastError);
     }
+    await this.callFunctionOn(
+      (result) => {
+        global.REPL.last = result;
+      },
+      evaluateResult.result,
+    );
+    return inspect(global.REPL.last);
   }
 
   async onAutocomplete(buffer) {

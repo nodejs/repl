@@ -12,6 +12,14 @@ try {
 const session = new inspector.Session();
 session.connect();
 
+const mainContextIdPromise = new Promise((resolve) => {
+  session.once('Runtime.executionContextCreated', ({ params: { context } }) => {
+    resolve(context.id);
+    session.post('Runtime.disable');
+  });
+  session.post('Runtime.enable');
+});
+
 function makeProxy(name) {
   return new Proxy({ cache: new Map() }, {
     get({ cache }, method) {
@@ -36,4 +44,5 @@ function makeProxy(name) {
 
 module.exports = {
   Runtime: makeProxy('Runtime'),
+  mainContextIdPromise,
 };
