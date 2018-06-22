@@ -143,7 +143,6 @@ class REPL {
 
         const k = (await Runtime.getProperties({
           objectId: evaluateResult.result.objectId,
-          ownProperties: true,
           generatePreview: true,
         })).result.map(({ name }) => name);
 
