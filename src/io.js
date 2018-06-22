@@ -224,11 +224,13 @@ class IO {
       this.completionList = undefined;
       await this.refresh(false);
     } else {
-      const c = await this.onAutocomplete(this.buffer);
-      if (c) {
-        this.completionList = c;
-        await this.autocomplete();
-      }
+      try {
+        const c = await this.onAutocomplete(this.buffer);
+        if (c) {
+          this.completionList = c;
+          await this.autocomplete();
+        }
+      } catch (e) {} // eslint-disable-line no-empty
     }
   }
 
