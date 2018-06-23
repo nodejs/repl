@@ -7,7 +7,7 @@ const { Runtime, mainContextIdPromise } = require('./inspector');
 const { strEscape } = require('./util');
 const util = require('util');
 
-const inspect = (v) => util.inspect(v, { colors: true, depth: 2 });
+const inspect = (v) => util.inspect(v, { colors: true, showProxy: 2 });
 
 // https://cs.chromium.org/chromium/src/third_party/blink/renderer/devtools/front_end/sdk/RuntimeModel.js?l=60-78&rcl=faa083eea5586885cc907ae28928dd766e47b6fa
 function wrapObjectLiteralExpressionIfNeeded(code) {
