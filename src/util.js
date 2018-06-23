@@ -1,5 +1,28 @@
 'use strict';
 
+const { isIdentifierStart, isIdentifierChar } = require('acorn');
+
+function isIdentifier(str) {
+  if (str === '') {
+    return false;
+  }
+  const first = str.codePointAt(0);
+  if (!isIdentifierStart(first)) {
+    return false;
+  }
+  const firstLen = first > 0xffff ? 2 : 1;
+  for (let i = firstLen; i < str.length; i += 1) {
+    const cp = str.codePointAt(i);
+    if (!isIdentifierChar(cp)) {
+      return false;
+    }
+    if (cp > 0xffff) {
+      i += 1;
+    }
+  }
+  return true;
+}
+
 // https://github.com/nodejs/node/blob/master/lib/util.js<Paste>
 
 /* eslint-disable no-control-regex */
@@ -57,5 +80,6 @@ const strEscape = (str) => {
 };
 
 module.exports = {
+  isIdentifier,
   strEscape,
 };
