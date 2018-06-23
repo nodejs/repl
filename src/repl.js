@@ -4,7 +4,7 @@ const IO = require('./io');
 const highlight = require('./highlight');
 const { processTopLevelAwait } = require('./await');
 const { Runtime, mainContextIdPromise } = require('./inspector');
-const { strEscape } = require('./util');
+const { strEscape, isIdentifier } = require('./util');
 const util = require('util');
 
 const inspect = (v) => util.inspect(v, { colors: true, showProxy: 2 });
@@ -52,13 +52,15 @@ class REPL {
     this.io.setPrefix('> ');
   }
 
-  async eval(code, awaitPromise = false, throwOnSideEffect = false) {
+  async eval(code, awaitPromise = false, bestEffort = false) {
     const expression = wrapObjectLiteralExpressionIfNeeded(code);
     return Runtime.evaluate({
       expression,
       generatePreview: true,
       awaitPromise,
-      throwOnSideEffect,
+      silent: bestEffort,
+      throwOnSideEffect: bestEffort,
+      timeout: bestEffort ? 500 : undefined,
       executionContextId: await mainContextIdPromise,
     });
   }
@@ -151,14 +153,19 @@ class REPL {
 
         if (computed) {
           keys = k.map((key) => {
-            const r = `${strEscape(key)}]`;
+            let r;
+            if (!leadingQuote && `${+key}` === key) {
+              r = `${key}]`;
+            } else {
+              r = `${strEscape(key)}]`;
+            }
             if (leadingQuote) {
               return r.slice(1);
             }
             return r;
           });
         } else {
-          keys = k.filter((key) => !/[\x00-\x1f\x27\x5c ]|^\d/.test(key)); // eslint-disable-line no-control-regex
+          keys = k.filter(isIdentifier);
         }
       }
     }
