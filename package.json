@@ -1,5 +1,5 @@
 {
-  "name": "nodejs/repl",
+  "name": "repl",
   "version": "0.0.1",
   "description": "Prototype REPL for Node.js",
   "main": "src/index.js",
