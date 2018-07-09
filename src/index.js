@@ -1,8 +1,8 @@
 'use strict';
 
-const REPL = require('./repl');
 const Module = require('module');
 const util = require('util');
+const REPL = require('./repl');
 
 const builtinLibs = Module.builtinModules.filter((x) => !/^_|\//.test(x));
 

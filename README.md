@@ -1,6 +1,4 @@
-# Prototype REPL
-
-This is a prototype REPL for Node.js
+# Node.js REPL Prototype
 
 Goals:
 
@@ -12,3 +10,21 @@ Goals:
   - Highlight output *and* input
   - autocomplete
 - Keep the code neat for future changes
+
+## Usage
+
+### Install
+```sh
+$ npm install -g nodejs/repl
+```
+```sh
+$ node-prototype-repl
+```
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## License
+
+MIT. See [LICENSE](./LICENSE).

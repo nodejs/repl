@@ -1,11 +1,11 @@
 'use strict';
 
+const util = require('util');
 const IO = require('./io');
 const highlight = require('./highlight');
 const { processTopLevelAwait } = require('./await');
 const { Runtime, mainContextIdPromise } = require('./inspector');
 const { strEscape, isIdentifier } = require('./util');
-const util = require('util');
 
 const inspect = (v) => util.inspect(v, { colors: true, showProxy: 2 });
 
@@ -39,6 +39,16 @@ async function collectGlobalNames() {
   return keys;
 }
 
+const engines = [
+  'V8',
+  'ChakraCore',
+];
+
+let engine = engines.find((e) => process.versions[e.toLowerCase()] !== undefined);
+if (engine !== undefined) {
+  engine = `(${engine} ${process.versions[engine.toLowerCase()]})`;
+}
+
 class REPL {
   constructor(stdout, stdin) {
     this.io = new IO(
@@ -46,7 +56,8 @@ class REPL {
       this.onLine.bind(this),
       this.onAutocomplete.bind(this),
       (s) => highlight(s),
-      `Node.js ${process.version} (V8 ${process.versions.v8})`,
+      `Node.js ${process.version} ${engine || '(Unknown Engine)'}
+Prototype REPL - https://github.com/nodejs/repl`,
     );
 
     this.io.setPrefix('> ');
