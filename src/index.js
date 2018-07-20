@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 'use strict';
 
 const Module = require('module');
@@ -31,9 +33,8 @@ builtinLibs.forEach((name) => {
   });
 });
 
-const m = new Module(process.cwd());
-m._compile('module.exports = require', process.cwd());
-global.require = m.exports;
+global.require = require;
+global.module = module;
 
 global.REPL = {
   time: (fn) => {

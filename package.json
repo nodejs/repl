@@ -8,7 +8,7 @@
     "lint": "eslint src"
   },
   "bin": {
-    "node-prototype-repl": "./bin/repl"
+    "node-prototype-repl": "./src/index.js"
   },
   "repository": {
     "type": "git",
