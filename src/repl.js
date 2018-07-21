@@ -7,6 +7,15 @@ const { processTopLevelAwait } = require('./await');
 const { Runtime, mainContextIdPromise } = require('./inspector');
 const { strEscape, isIdentifier } = require('./util');
 
+// TODO(devsnek): make more robust
+Error.prepareStackTrace = (err, frames) => {
+  const cut = frames.findIndex((f) =>
+    !f.getFileName() && !f.getFunctionName()) + 1;
+
+  return `${err}
+    at ${frames.slice(0, cut).join('\n    at ')}`;
+};
+
 const inspect = (v) => util.inspect(v, { colors: true, showProxy: 2 });
 
 // https://cs.chromium.org/chromium/src/third_party/blink/renderer/devtools/front_end/sdk/RuntimeModel.js?l=60-78&rcl=faa083eea5586885cc907ae28928dd766e47b6fa
