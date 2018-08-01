@@ -6,6 +6,7 @@ const highlight = require('./highlight');
 const { processTopLevelAwait } = require('./await');
 const { Runtime, mainContextIdPromise } = require('./inspector');
 const { strEscape, isIdentifier } = require('./util');
+const isRecoverableError = require('./recoverable');
 
 const inspect = (v) => util.inspect(v, { colors: true, showProxy: 2 });
 
@@ -96,21 +97,29 @@ Prototype REPL - https://github.com/nodejs/repl`,
     const evaluateResult = await this.eval(line, awaited);
 
     if (evaluateResult.exceptionDetails) {
+      // lets try for recovering
+      const result = isRecoverableError(evaluateResult.exceptionDetails.exception, line);
+      if (result) {
+        return IO.kNeedsAnotherLine;
+      } else {
+        // we tried our best - throw error
+        await this.callFunctionOn(
+          (err) => {
+            global.REPL.lastError = err;
+          },
+          evaluateResult.exceptionDetails.exception,
+        );
+        return inspect(global.REPL.lastError);
+      }
+    } else {
       await this.callFunctionOn(
-        (err) => {
-          global.REPL.lastError = err;
+        (result) => {
+          global.REPL.last = result;
         },
-        evaluateResult.exceptionDetails.exception,
+        evaluateResult.result,
       );
-      return inspect(global.REPL.lastError);
+      return inspect(global.REPL.last);
     }
-    await this.callFunctionOn(
-      (result) => {
-        global.REPL.last = result;
-      },
-      evaluateResult.result,
-    );
-    return inspect(global.REPL.last);
   }
 
   async onAutocomplete(buffer) {
