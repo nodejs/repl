@@ -9,10 +9,11 @@ class IO {
     this.stdin = stdin;
     this.stdout = stdout;
 
-    this.buffer = '';
+    this.buffer = ''; // used for capturing the current statement
     this.cursor = 0;
     this.prefix = '';
     this.suffix = '';
+    this.multilineBuffer = ''; // for buffering the multiline statements
 
     this._paused = false;
     this.transformBuffer = transformBuffer;
@@ -134,7 +135,19 @@ class IO {
                   this.buffer = '';
                   this.cursor = 0;
                   this.history.unshift(b);
-                  this.stdout.write(`${await onLine(b)}\n`);
+                  this.multilineBuffer += b;
+                  // always buffer the line so that when we encounter multi-line
+                  // statements we can execute them as needed.
+                  const code = this.multilineBuffer;
+                  const result = await onLine(code);
+                  // online returns a Symbol when it sees a multi-line statement
+                  if (IO.kNeedsAnotherLine !== result) {
+                    this.stdout.write(`${result}\n`);
+                    this.multilineBuffer = '';
+                    this.setPrefix('> ');
+                  } else {
+                    this.setPrefix('... ');
+                  }
                   this.unpause();
                 } else {
                   this.stdout.write('\n');
@@ -297,5 +310,8 @@ class IO {
     }
   }
 }
+
+// Symbol to notify that IO needs an another line
+IO.kNeedsAnotherLine = Symbol('IO.kNeedsAnotherLine');
 
 module.exports = IO;
