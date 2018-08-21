@@ -43,7 +43,7 @@ function wrapObjectLiteralExpressionIfNeeded(code) {
 async function collectGlobalNames() {
   const keys = Object.getOwnPropertyNames(global);
   try {
-    keys.unshift(...await Runtime.globalLexicalScopeNames().names);
+    keys.unshift(...(await Runtime.globalLexicalScopeNames()).names);
   } catch (e) {} // eslint-disable-line no-empty
   return keys;
 }
