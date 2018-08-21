@@ -176,13 +176,23 @@ Prototype REPL - https://github.com/nodejs/repl`,
           return undefined;
         }
 
-        const k = (await Runtime.getProperties({
+        const own = [];
+        const inherited = [];
+
+        (await Runtime.getProperties({
           objectId: evaluateResult.result.objectId,
           generatePreview: true,
-        })).result
+        }))
+          .result
           .filter(({ symbol }) => !symbol)
-          .sort((a, b) => (a.isOwn === b.isOwn ? 1 : -1))
-          .map(({ name }) => name);
+          .forEach(({ isOwn, name }) => {
+            if (isOwn) {
+              own.push(name);
+            } else {
+              inherited.push(name);
+            }
+          });
+        const k = [...own, ...inherited];
 
         if (computed) {
           keys = k.map((key) => {
