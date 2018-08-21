@@ -13,8 +13,13 @@ Error.prepareStackTrace = (err, frames) => {
   const cut = frames.findIndex((f) =>
     !f.getFileName() && !f.getFunctionName()) + 1;
 
-  return `${err}
-    at ${frames.slice(0, cut).join('\n    at ')}`;
+  frames = frames.slice(0, cut);
+
+  if (frames.length === 0) {
+    return `${err}`;
+  }
+
+  return `${err}\n    at ${frames.join('\n    at ')}`;
 };
 
 const inspect = (v) => util.inspect(v, { colors: true, showProxy: 2 });
@@ -103,32 +108,31 @@ Prototype REPL - https://github.com/nodejs/repl`,
         awaited = true;
       }
     }
+
     const evaluateResult = await this.eval(line, awaited);
 
     if (evaluateResult.exceptionDetails) {
-      // lets try for recovering
-      const result = isRecoverableError(evaluateResult.exceptionDetails.exception, line);
-      if (result) {
+      if (isRecoverableError(line)) {
         return IO.kNeedsAnotherLine;
-      } else {
-        // we tried our best - throw error
-        await this.callFunctionOn(
-          (err) => {
-            global.REPL.lastError = err;
-          },
-          evaluateResult.exceptionDetails.exception,
-        );
-        return inspect(global.REPL.lastError);
       }
-    } else {
+
       await this.callFunctionOn(
-        (result) => {
-          global.REPL.last = result;
+        (err) => {
+          global.REPL.lastError = err;
         },
-        evaluateResult.result,
+        evaluateResult.exceptionDetails.exception,
       );
-      return inspect(global.REPL.last);
+
+      return inspect(global.REPL.lastError);
     }
+
+    await this.callFunctionOn(
+      (result) => {
+        global.REPL.last = result;
+      },
+      evaluateResult.result,
+    );
+    return inspect(global.REPL.last);
   }
 
   async onAutocomplete(buffer) {

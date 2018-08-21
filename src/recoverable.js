@@ -1,13 +1,12 @@
 'use strict';
 
 const acorn = require('acorn');
+
 const { tokTypes: tt } = acorn;
 
 // If the error is that we've unexpectedly ended the input,
 // then let the user try to recover by adding more input.
-// Note: `e` (the original exception) is not used by the current implemention,
-// but may be needed in the future.
-function isRecoverableError(e, code) {
+function isRecoverableError(code) {
   let recoverable = false;
 
   // Determine if the point of the any error raised is at the end of the input.
@@ -27,16 +26,17 @@ function isRecoverableError(e, code) {
   //       failure, indicating that this code needs to be updated.
   //
   acorn.plugins.replRecoverable = (parser) => {
-    parser.extend('nextToken', (nextToken) => {
-      return function() {
-        Reflect.apply(nextToken, this, []);
+    parser.extend('nextToken', (nextToken) =>
+      function handleNextToken() {
+        if (this.type === tt.eof) {
+          recoverable = true;
+        }
 
-        if (this.type === tt.eof) recoverable = true;
-      };
-    });
+        return Reflect.apply(nextToken, this, []);
+      });
 
-    parser.extend('raise', (raise) => {
-      return function(pos, message) {
+    parser.extend('raise', (raise) =>
+      function handleRaise(pos, message) {
         switch (message) {
           case 'Unterminated template':
           case 'Unterminated comment':
@@ -44,22 +44,28 @@ function isRecoverableError(e, code) {
             recoverable = true;
             break;
 
-          case 'Unterminated string constant':
+          case 'Unterminated string constant': {
             const token = this.input.slice(this.lastTokStart, this.pos);
             // see https://www.ecma-international.org/ecma-262/#sec-line-terminators
             recoverable = /\\(?:\r\n?|\n|\u2028|\u2029)$/.test(token);
+            break;
+          }
+
+          default:
+            break;
         }
 
-        Reflect.apply(raise, this, [pos, message]);
-      };
-    });
+        return Reflect.apply(raise, this, [pos, message]);
+      });
   };
 
   // For similar reasons as `defaultEval`, wrap expressions starting with a
   // curly brace with parenthesis.  Note: only the open parenthesis is added
   // here as the point is to test for potentially valid but incomplete
   // expressions.
-  if (/^\s*\{/.test(code) && isRecoverableError(e, `(${code}`)) return true;
+  if (/^\s*\{/.test(code) && isRecoverableError(`(${code}`)) {
+    return true;
+  }
 
   // Try to parse the code with acorn.  If the parse fails, ignore the acorn
   // error and return the recoverable status.
@@ -70,10 +76,9 @@ function isRecoverableError(e, code) {
     // but Acorn detected no issue.  Presume that additional text won't
     // address this issue.
     return false;
-  } catch (e) {
+  } catch {
     return recoverable;
   }
 }
 
-module.exports = isRecoverableError
-
+module.exports = isRecoverableError;
