@@ -112,7 +112,8 @@ Prototype REPL - https://github.com/nodejs/repl`,
     const evaluateResult = await this.eval(line, awaited);
 
     if (evaluateResult.exceptionDetails) {
-      if (isRecoverableError(line)) {
+      const expression = wrapObjectLiteralExpressionIfNeeded(line);
+      if (isRecoverableError(expression)) {
         return IO.kNeedsAnotherLine;
       }
 

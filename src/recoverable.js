@@ -28,11 +28,11 @@ function isRecoverableError(code) {
   acorn.plugins.replRecoverable = (parser) => {
     parser.extend('nextToken', (nextToken) =>
       function handleNextToken() {
+        Reflect.apply(nextToken, this, []);
+
         if (this.type === tt.eof) {
           recoverable = true;
         }
-
-        return Reflect.apply(nextToken, this, []);
       });
 
     parser.extend('raise', (raise) =>
