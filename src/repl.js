@@ -8,6 +8,20 @@ const { Runtime, mainContextIdPromise } = require('./inspector');
 const { strEscape, isIdentifier } = require('./util');
 const isRecoverableError = require('./recoverable');
 
+// TODO(devsnek): make more robust
+Error.prepareStackTrace = (err, frames) => {
+  const cut = frames.findIndex((f) =>
+    !f.getFileName() && !f.getFunctionName()) + 1;
+
+  frames = frames.slice(0, cut);
+
+  if (frames.length === 0) {
+    return `${err}`;
+  }
+
+  return `${err}\n    at ${frames.join('\n    at ')}`;
+};
+
 const inspect = (v) => util.inspect(v, { colors: true, showProxy: 2 });
 
 // https://cs.chromium.org/chromium/src/third_party/blink/renderer/devtools/front_end/sdk/RuntimeModel.js?l=60-78&rcl=faa083eea5586885cc907ae28928dd766e47b6fa
@@ -35,7 +49,7 @@ function wrapObjectLiteralExpressionIfNeeded(code) {
 async function collectGlobalNames() {
   const keys = Object.getOwnPropertyNames(global);
   try {
-    keys.unshift(...await Runtime.globalLexicalScopeNames().names);
+    keys.unshift(...(await Runtime.globalLexicalScopeNames()).names);
   } catch (e) {} // eslint-disable-line no-empty
   return keys;
 }
@@ -94,32 +108,31 @@ Prototype REPL - https://github.com/nodejs/repl`,
         awaited = true;
       }
     }
+
     const evaluateResult = await this.eval(line, awaited);
 
     if (evaluateResult.exceptionDetails) {
-      // lets try for recovering
-      const result = isRecoverableError(evaluateResult.exceptionDetails.exception, line);
-      if (result) {
+      if (isRecoverableError(line)) {
         return IO.kNeedsAnotherLine;
-      } else {
-        // we tried our best - throw error
-        await this.callFunctionOn(
-          (err) => {
-            global.REPL.lastError = err;
-          },
-          evaluateResult.exceptionDetails.exception,
-        );
-        return inspect(global.REPL.lastError);
       }
-    } else {
+
       await this.callFunctionOn(
-        (result) => {
-          global.REPL.last = result;
+        (err) => {
+          global.REPL.lastError = err;
         },
-        evaluateResult.result,
+        evaluateResult.exceptionDetails.exception,
       );
-      return inspect(global.REPL.last);
+
+      return inspect(global.REPL.lastError);
     }
+
+    await this.callFunctionOn(
+      (result) => {
+        global.REPL.last = result;
+      },
+      evaluateResult.result,
+    );
+    return inspect(global.REPL.last);
   }
 
   async onAutocomplete(buffer) {
@@ -163,13 +176,23 @@ Prototype REPL - https://github.com/nodejs/repl`,
           return undefined;
         }
 
-        const k = (await Runtime.getProperties({
+        const own = [];
+        const inherited = [];
+
+        (await Runtime.getProperties({
           objectId: evaluateResult.result.objectId,
           generatePreview: true,
-        })).result
+        }))
+          .result
           .filter(({ symbol }) => !symbol)
-          .sort((a, b) => (a.isOwn === b.isOwn ? 1 : -1))
-          .map(({ name }) => name);
+          .forEach(({ isOwn, name }) => {
+            if (isOwn) {
+              own.push(name);
+            } else {
+              inherited.push(name);
+            }
+          });
+        const k = [...own, ...inherited];
 
         if (computed) {
           keys = k.map((key) => {
