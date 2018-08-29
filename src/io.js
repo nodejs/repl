@@ -98,7 +98,7 @@ class IO {
           break;
         case 'right':
           if (this.cursor === this.buffer.length) {
-            if (this.suffix) {
+            if (this.suffix && typeof this.completionList !== 'string') {
               this.completionList = undefined;
               this.buffer += this.suffix;
               this.cursor += this.suffix.length;
@@ -226,7 +226,9 @@ class IO {
     if (!this.onAutocomplete) {
       return;
     }
-    if (this.completionList && this.completionList.length) {
+    if (typeof this.completionList === 'string') {
+      await this.addSuffix(this.completionList);
+    } else if (this.completionList && this.completionList.length) {
       const next = this.completionList.shift();
       await this.addSuffix(next);
     } else if (this.completionList) {

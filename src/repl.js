@@ -1,6 +1,7 @@
 'use strict';
 
 const util = require('util');
+const acorn = require('acorn');
 const IO = require('./io');
 const highlight = require('./highlight');
 const { processTopLevelAwait } = require('./await');
@@ -46,6 +47,14 @@ function wrapObjectLiteralExpressionIfNeeded(code) {
   }
 }
 
+function isCallExpression(code) {
+  try {
+    return acorn.parse(code).body[0].expression.type === 'CallExpression';
+  } catch {
+    return false;
+  }
+}
+
 async function collectGlobalNames() {
   const keys = Object.getOwnPropertyNames(global);
   try {
@@ -62,6 +71,30 @@ const engines = [
 let engine = engines.find((e) => process.versions[e.toLowerCase()] !== undefined);
 if (engine !== undefined) {
   engine = `(${engine} ${process.versions[engine.toLowerCase()]})`;
+}
+
+async function oneLineInspect(result) {
+  if (result.objectId) {
+    await Runtime.callFunctionOn({
+      functionDeclaration: `${(v) => {
+        global.REPL._inspectTarget = v;
+      }}`,
+      arguments: [result],
+      executionContextId: await mainContextIdPromise,
+    });
+    const str = util.inspect(global.REPL._inspectTarget, {
+      breakLength: Infinity,
+      compact: true,
+      maxArrayLength: 10,
+      depth: 1,
+    }).trim();
+    // TODO(devsnek): switch to somehow limiting number of keys that util.inspect uses
+    if (str.length > 80) {
+      return `${str.slice(0, 80)}...`;
+    }
+    return str;
+  }
+  return result.description;
 }
 
 class REPL {
@@ -149,7 +182,7 @@ Prototype REPL - https://github.com/nodejs/repl`,
       let index = buffer.lastIndexOf('.');
       if (index !== -1) {
         expr = buffer.slice(0, index);
-        filter = buffer.slice(index + 1, buffer.length);
+        filter = buffer.slice(index + 1, buffer.length).trim();
       }
 
       if (!expr) {
@@ -169,6 +202,11 @@ Prototype REPL - https://github.com/nodejs/repl`,
           filter = buffer.slice(index + 1, buffer.length);
           computed = true;
         }
+      }
+
+      if (isCallExpression(filter)) {
+        expr = undefined;
+        filter = undefined;
       }
 
       if (expr) {
@@ -211,11 +249,29 @@ Prototype REPL - https://github.com/nodejs/repl`,
         } else {
           keys = k.filter(isIdentifier);
         }
+      } else {
+        const evaluateResult = await this.eval(
+          wrapObjectLiteralExpressionIfNeeded(buffer), false, true,
+        );
+        if (evaluateResult.exceptionDetails) {
+          return undefined;
+        }
+        return ` // ${await oneLineInspect(evaluateResult.result)}`;
       }
     }
 
     if (keys) {
       if (filter) {
+        if (keys.includes(filter)) {
+          const evaluateResult = await this.eval(
+            wrapObjectLiteralExpressionIfNeeded(buffer), false, true,
+          );
+          if (evaluateResult.exceptionDetails) {
+            return undefined;
+          }
+          return ` // ${await oneLineInspect(evaluateResult.result)}`;
+        }
+
         return keys
           .filter((k) => k.startsWith(filter))
           .map((k) => k.slice(filter.length));
