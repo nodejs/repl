@@ -94,7 +94,7 @@ async function oneLineInspect(result) {
     }
     return str;
   }
-  return result.description;
+  return util.inspect(result.value);
 }
 
 class REPL {
