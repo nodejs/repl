@@ -9,11 +9,11 @@ class IO {
     this.stdin = stdin;
     this.stdout = stdout;
 
-    this.buffer = '';
+    this._buffer = '';
+    this._cursor = 0;
+    this._prefix = '';
+    this._suffix = '';
     this.multilineBuffer = '';
-    this.cursor = 0;
-    this.prefix = '';
-    this.suffix = '';
 
     this._paused = false;
     this.transformBuffer = transformBuffer;
@@ -36,15 +36,13 @@ class IO {
           case 'h':
             break;
           case 'u':
-            this.buffer = this.buffer.slice(this.cursor, this.buffer.length);
-            this.cursor = 0;
-            await this.refresh();
+            await this.update(this.buffer.slice(this.cursor, this.buffer.length), 0);
             break;
-          case 'k':
-            this.buffer = this.buffer.slice(0, this.cursor);
-            this.cursor = this.buffer.length;
-            await this.refresh();
+          case 'k': {
+            const b = this.buffer.slice(0, this.cursor);
+            await this.update(b, b.length);
             break;
+          }
           case 'a':
             await this.moveCursor(-Infinity);
             break;
@@ -60,7 +58,7 @@ class IO {
           case 'l':
             cursorTo(stdout, 0, 0);
             stdout.write(CSI.kClearScreenDown);
-            await this.refresh();
+            await this.flip();
             break;
           case 'n':
             await this.nextHistory();
@@ -73,8 +71,7 @@ class IO {
               return -1;
             }
             this.stdout.write('\n(To exit, press ^C again or call exit)\n');
-            this.buffer = '';
-            this.cursor = 0;
+            await this.update('', 0);
             closeOnThisOne = true;
             return undefined;
           case 'z':
@@ -98,25 +95,24 @@ class IO {
           break;
         case 'right':
           if (this.cursor === this.buffer.length) {
-            if (this.suffix && typeof this.completionList !== 'string') {
+            if (this._suffix && typeof this.completionList !== 'string') {
               this.completionList = undefined;
-              this.buffer += this.suffix;
-              this.cursor += this.suffix.length;
-              await this.refresh();
+              await this.update(this.buffer + this._suffix, this.cursor + this._suffix.length);
             }
             break;
           }
           await this.moveCursor(1);
           break;
         case 'delete':
-        case 'backspace':
+        case 'backspace': {
           if (this.cursor === 0) {
             break;
           }
-          this.buffer = this.buffer.slice(0, this.cursor - 1) +
+          const b = this.buffer.slice(0, this.cursor - 1) +
             this.buffer.slice(this.cursor, this.buffer.length);
-          await this.moveCursor(-1);
+          await this.update(b, this.cursor - 1);
           break;
+        }
         case 'tab': {
           await this.autocomplete();
           break;
@@ -128,27 +124,24 @@ class IO {
             for (let i = 0; i < lines.length; i += 1) {
               if (i > 0) {
                 if (this.buffer) {
-                  await this.refresh(false);
                   this.pause();
                   this.stdout.write('\n');
                   const b = this.buffer;
-                  this.buffer = '';
-                  this.cursor = 0;
+                  await this.update('', 0);
                   this.history.unshift(b);
                   const result = await onLine(this.multilineBuffer + b);
                   if (result === IO.kNeedsAnotherLine) {
                     this.multilineBuffer += b;
-                    this.setPrefix('... ');
+                    await this.setPrefix('... ');
                   } else {
                     this.multilineBuffer = '';
                     this.stdout.write(`${result}\n`);
-                    this.setPrefix('> ');
+                    await this.setPrefix('> ');
                   }
                   this.unpause();
                 } else {
                   this.stdout.write('\n');
                 }
-                await this.refresh();
               }
               await this.appendToBuffer(lines[i]);
             }
@@ -185,6 +178,14 @@ class IO {
     });
   }
 
+  get buffer() {
+    return this._buffer;
+  }
+
+  get cursor() {
+    return this._cursor;
+  }
+
   get paused() {
     return this._paused;
   }
@@ -199,17 +200,23 @@ class IO {
     this._paused = false;
   }
 
+  async update(buffer, cursor) {
+    this._buffer = buffer;
+    this._cursor = cursor;
+    this._suffix = '';
+    this.completionList = undefined;
+    await this.autocomplete();
+    await this.flip();
+  }
+
   async nextHistory() {
     if (this.history.index <= 0) {
-      this.buffer = '';
-      this.cursor = 0;
-      await this.refresh();
+      await this.update('', 0);
       return;
     }
     this.history.index -= 1;
-    this.buffer = this.history[this.history.index];
-    this.cursor = this.buffer.length;
-    await this.refresh();
+    const h = this.history[this.history.index];
+    await this.update(h, h.length);
   }
 
   async previousHistory() {
@@ -217,23 +224,23 @@ class IO {
       return;
     }
     this.history.index += 1;
-    this.buffer = this.history[this.history.index];
-    this.cursor = this.buffer.length;
-    await this.refresh();
+
+    const h = this.history[this.history.index];
+    await this.update(h, h.length);
   }
 
   async autocomplete() {
-    if (!this.onAutocomplete) {
+    if (!this.onAutocomplete || !this.buffer) {
       return;
     }
     if (typeof this.completionList === 'string') {
-      await this.addSuffix(this.completionList);
+      this.setSuffix(this.completionList);
     } else if (this.completionList && this.completionList.length) {
       const next = this.completionList.shift();
-      await this.addSuffix(next);
+      this.setSuffix(next);
     } else if (this.completionList) {
       this.completionList = undefined;
-      await this.refresh(false);
+      this.setSuffix();
     } else {
       try {
         const c = await this.onAutocomplete(this.buffer);
@@ -241,51 +248,42 @@ class IO {
           this.completionList = c;
           await this.autocomplete();
         }
-      } catch (e) {} // eslint-disable-line no-empty
+      } catch {} // eslint-disable-line no-empty
     }
   }
 
-  async setPrefix(s) {
-    if (!s) {
-      this.prefix = '';
-    }
-    this.prefix = s;
-    await this.refresh();
+  async setPrefix(s = '') {
+    this._prefix = s;
+    await this.flip();
   }
 
-  async addSuffix(s = '') {
-    if (this.paused || this.cursor !== this.buffer.length) {
-      return;
-    }
-    this.suffix = `${s}`;
-    this.stdout.write(CSI.kClearScreenDown);
-    this.stdout.write(`\u001b[90m${this.suffix}\u001b[39m`);
-    cursorTo(this.stdout, this.cursor + this.prefix.length);
+  setSuffix(s = '') {
+    this._suffix = s;
   }
 
   async appendToBuffer(s) {
+    let b = this.buffer;
     if (this.cursor < this.buffer.length) {
       const beg = this.buffer.slice(0, this.cursor);
       const end = this.buffer.slice(this.cursor, this.buffer.length);
-      this.buffer = beg + s + end;
+      b = beg + s + end;
     } else {
-      this.buffer += s;
+      b += s;
     }
 
-    this.cursor += s.length;
-    await this.refresh();
+    await this.update(b, this.cursor + s.length);
   }
 
   async moveCursor(n) {
     const c = this.cursor + n;
     if (c < 0) {
-      this.cursor = 0;
+      this._cursor = 0;
     } else if (c > this.buffer.length) {
-      this.cursor = this.buffer.length;
+      this._cursor = this.buffer.length;
     } else {
-      this.cursor = c;
+      this._cursor = c;
     }
-    await this.refresh();
+    await this.flip();
   }
 
   clear() {
@@ -293,19 +291,14 @@ class IO {
     this.stdout.write(CSI.kClearScreenDown);
   }
 
-  async refresh(complete = true) {
+  async flip() {
     if (this.paused) {
       return;
     }
-    this.completionList = undefined;
-    this.suffix = '';
     this.clear();
     const b = this.transformBuffer ? await this.transformBuffer(this.buffer) : this.buffer;
-    this.stdout.write(this.prefix + b);
-    cursorTo(this.stdout, this.cursor + this.prefix.length);
-    if (complete && this.buffer) {
-      await this.autocomplete();
-    }
+    this.stdout.write(`${this._prefix}${b}\u001b[90m${this._suffix}\u001b[39m`);
+    cursorTo(this.stdout, this.cursor + this._prefix.length);
   }
 }
 
