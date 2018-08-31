@@ -263,7 +263,9 @@ class IO {
           await this.autocomplete();
         }
       } catch {} // eslint-disable-line no-empty
+      return;
     }
+    await this.flip();
   }
 
   async setPrefix(s = '') {

@@ -1,7 +1,7 @@
 'use strict';
 
 const util = require('util');
-const acorn = require('acorn');
+const { parse_dammit: parseDammit } = require('acorn/dist/acorn_loose');
 const IO = require('./io');
 const highlight = require('./highlight');
 const { processTopLevelAwait } = require('./await');
@@ -44,14 +44,6 @@ function wrapObjectLiteralExpressionIfNeeded(code) {
     return wrappedCode;
   } catch (e) {
     return code;
-  }
-}
-
-function isCallExpression(code) {
-  try {
-    return acorn.parse(code).body[0].expression.type === 'CallExpression';
-  } catch {
-    return false;
   }
 }
 
@@ -170,115 +162,101 @@ Prototype REPL - https://github.com/nodejs/repl`,
   }
 
   async onAutocomplete(buffer) {
+    if (buffer.length === 0) {
+      return collectGlobalNames();
+    }
+
+    const inlineEval = async (source) => {
+      const { result, exceptionDetails } =
+        await this.eval(wrapObjectLiteralExpressionIfNeeded(source), false, true);
+      if (exceptionDetails) {
+        return undefined;
+      }
+      return ` // ${await oneLineInspect(result)}`;
+    };
+
+    const statement = parseDammit(buffer).body[0];
+    if (statement.type !== 'ExpressionStatement') {
+      return undefined;
+    }
+    const { expression } = statement;
+
     let keys;
     let filter;
-    if (buffer.length === 0) {
+    if (expression.type === 'Identifier') {
       keys = await collectGlobalNames();
-    } else {
-      let expr;
-      let computed = false;
+      filter = expression.name;
+
+      if (keys.includes(filter)) {
+        return inlineEval(buffer);
+      }
+    }
+
+    if (expression.type === 'MemberExpression') {
+      const expr = buffer.slice(expression.object.start, expression.object.end);
       let leadingQuote = false;
-
-      let index = buffer.lastIndexOf('.');
-      if (index !== -1) {
-        expr = buffer.slice(0, index);
-        filter = buffer.slice(index + 1, buffer.length).trim();
+      if (expression.computed && expression.property.type === 'Literal') {
+        filter = expression.property.value;
+        leadingQuote = expression.property.raw.startsWith('\'');
+      } else if (!expression.computed && expression.property.type === 'Identifier') {
+        filter = expression.property.name === '✖' ? undefined : expression.property.name;
       }
 
-      if (!expr) {
-        index = buffer.lastIndexOf('[\'');
-        if (index !== -1) {
-          expr = buffer.slice(0, index);
-          filter = buffer.slice(index + 2, buffer.length);
-          computed = true;
-          leadingQuote = true;
-        }
+      const evaluateResult = await this.eval(expr, false, true);
+      if (evaluateResult.exceptionDetails) {
+        return undefined;
       }
 
-      if (!expr) {
-        index = buffer.lastIndexOf('[');
-        if (index !== -1) {
-          expr = buffer.slice(0, index);
-          filter = buffer.slice(index + 1, buffer.length);
-          computed = true;
-        }
+      const own = [];
+      const inherited = [];
+      (await Runtime.getProperties({
+        objectId: evaluateResult.result.objectId,
+        generatePreview: true,
+      }))
+        .result
+        .filter(({ symbol }) => !symbol)
+        .forEach(({ isOwn, name }) => {
+          if (isOwn) {
+            own.push(name);
+          } else {
+            inherited.push(name);
+          }
+        });
+
+      keys = [...own, ...inherited];
+
+      if (keys.includes(filter)) {
+        return inlineEval(buffer);
       }
 
-      if (isCallExpression(filter)) {
-        expr = undefined;
-        filter = undefined;
-      }
-
-      if (expr) {
-        const evaluateResult = await this.eval(expr, false, true);
-        if (evaluateResult.exceptionDetails) {
-          return undefined;
-        }
-
-        const own = [];
-        const inherited = [];
-
-        (await Runtime.getProperties({
-          objectId: evaluateResult.result.objectId,
-          generatePreview: true,
-        }))
-          .result
-          .filter(({ symbol }) => !symbol)
-          .forEach(({ isOwn, name }) => {
-            if (isOwn) {
-              own.push(name);
-            } else {
-              inherited.push(name);
-            }
-          });
-        const k = [...own, ...inherited];
-
-        if (computed) {
-          keys = k.map((key) => {
-            let r;
-            if (!leadingQuote && `${+key}` === key) {
-              r = `${key}]`;
-            } else {
-              r = `${strEscape(key)}]`;
-            }
+      if (expression.computed) {
+        keys = keys.map((key) => {
+          let r;
+          if (!leadingQuote && `${+key}` === key) {
+            r = key;
+          } else {
+            r = strEscape(key);
             if (leadingQuote) {
-              return r.slice(1);
+              r = r.slice(1);
             }
-            return r;
-          });
-        } else {
-          keys = k.filter(isIdentifier);
-        }
+          }
+          return `${r}]`;
+        });
       } else {
-        const evaluateResult = await this.eval(
-          wrapObjectLiteralExpressionIfNeeded(buffer), false, true,
-        );
-        if (evaluateResult.exceptionDetails) {
-          return undefined;
-        }
-        return ` // ${await oneLineInspect(evaluateResult.result)}`;
+        keys = keys.filter(isIdentifier);
       }
     }
 
     if (keys) {
       if (filter) {
-        if (keys.includes(filter)) {
-          const evaluateResult = await this.eval(
-            wrapObjectLiteralExpressionIfNeeded(buffer), false, true,
-          );
-          if (evaluateResult.exceptionDetails) {
-            return undefined;
-          }
-          return ` // ${await oneLineInspect(evaluateResult.result)}`;
-        }
-
         return keys
           .filter((k) => k.startsWith(filter))
           .map((k) => k.slice(filter.length));
       }
       return keys;
     }
-    return undefined;
+
+    return inlineEval(buffer);
   }
 }
 
