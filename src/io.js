@@ -73,10 +73,24 @@ class IO {
             this.stdout.write('\n(To exit, press ^C again or call exit)\n');
             await this.update('', 0);
             closeOnThisOne = true;
-            return undefined;
+            break;
           case 'z':
           case 'd':
             return -1;
+          case 'left':
+            if (this.cursor > 0) {
+              const leading = this.buffer.slice(0, this.cursor);
+              const match = leading.match(/(?:[^\w\s]+|\w+|)\s*$/);
+              await this.moveCursor(-match[0].length);
+            }
+            break;
+          case 'right':
+            if (this.cursor < this.buffer.length) {
+              const trailing = this.buffer.slice(this.cursor);
+              const match = trailing.match(/^(?:\s+|\W+|\w+)\s*/);
+              await this.moveCursor(match[0].length);
+            }
+            break;
           default:
             break;
         }
