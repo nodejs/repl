@@ -65,30 +65,6 @@ if (engine !== undefined) {
   engine = `(${engine} ${process.versions[engine.toLowerCase()]})`;
 }
 
-async function oneLineInspect(result) {
-  if (result.objectId) {
-    await Runtime.callFunctionOn({
-      functionDeclaration: `${(v) => {
-        global.REPL._inspectTarget = v;
-      }}`,
-      arguments: [result],
-      executionContextId: await mainContextIdPromise,
-    });
-    const str = util.inspect(global.REPL._inspectTarget, {
-      breakLength: Infinity,
-      compact: true,
-      maxArrayLength: 10,
-      depth: 1,
-    }).trim();
-    // TODO(devsnek): switch to somehow limiting number of keys that util.inspect uses
-    if (str.length > 80) {
-      return `${str.slice(0, 80)}...`;
-    }
-    return str;
-  }
-  return util.inspect(result.value);
-}
-
 class REPL {
   constructor(stdout, stdin) {
     this.io = new IO(
@@ -161,19 +137,36 @@ Prototype REPL - https://github.com/nodejs/repl`,
     return inspect(global.REPL.last);
   }
 
+  async oneLineEval(source) {
+    const { result, exceptionDetails } =
+      await this.eval(wrapObjectLiteralExpressionIfNeeded(source), false, true);
+    if (exceptionDetails) {
+      return undefined;
+    }
+
+    if (result.objectId) {
+      await Runtime.callFunctionOn({
+        functionDeclaration: `${(v) => {
+          global.REPL._inspectTarget = v;
+        }}`,
+        arguments: [result],
+        executionContextId: await mainContextIdPromise,
+      });
+      const s = util.inspect(global.REPL._inspectTarget, {
+        breakLength: Infinity,
+        compact: true,
+        maxArrayLength: 10,
+        depth: 1,
+      }).trim();
+      return ` // ${s}`;
+    }
+    return ` // ${util.inspect(result.value)}`;
+  }
+
   async onAutocomplete(buffer) {
     if (buffer.length === 0) {
       return collectGlobalNames();
     }
-
-    const inlineEval = async (source) => {
-      const { result, exceptionDetails } =
-        await this.eval(wrapObjectLiteralExpressionIfNeeded(source), false, true);
-      if (exceptionDetails) {
-        return undefined;
-      }
-      return ` // ${await oneLineInspect(result)}`;
-    };
 
     const statement = parseDammit(buffer).body[0];
     if (statement.type !== 'ExpressionStatement') {
@@ -188,7 +181,7 @@ Prototype REPL - https://github.com/nodejs/repl`,
       filter = expression.name;
 
       if (keys.includes(filter)) {
-        return inlineEval(buffer);
+        return this.oneLineEval(buffer);
       }
     }
 
@@ -202,9 +195,20 @@ Prototype REPL - https://github.com/nodejs/repl`,
         filter = expression.property.name === '✖' ? undefined : expression.property.name;
       }
 
-      const evaluateResult = await this.eval(expr, false, true);
+      let evaluateResult = await this.eval(expr, false, true);
       if (evaluateResult.exceptionDetails) {
         return undefined;
+      }
+
+      if (evaluateResult.result.type !== 'object' &&
+          evaluateResult.result.type !== 'undefined' &&
+          evaluateResult.result.subtype !== 'null') {
+        evaluateResult = await this.eval(
+          `Object(${wrapObjectLiteralExpressionIfNeeded(expr)})`, false, true,
+        );
+        if (evaluateResult.exceptionDetails) {
+          return undefined;
+        }
       }
 
       const own = [];
@@ -226,7 +230,7 @@ Prototype REPL - https://github.com/nodejs/repl`,
       keys = [...own, ...inherited];
 
       if (keys.includes(filter)) {
-        return inlineEval(buffer);
+        return this.oneLineEval(buffer);
       }
 
       if (expression.computed) {
@@ -256,7 +260,7 @@ Prototype REPL - https://github.com/nodejs/repl`,
       return keys;
     }
 
-    return inlineEval(buffer);
+    return this.oneLineEval(buffer);
   }
 }
 
