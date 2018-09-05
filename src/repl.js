@@ -1,5 +1,6 @@
 'use strict';
 
+const Module = require('module');
 const util = require('util');
 const { parse_dammit: parseDammit } = require('acorn/dist/acorn_loose');
 const IO = require('./io');
@@ -182,6 +183,28 @@ Prototype REPL - https://github.com/nodejs/repl`,
 
       if (keys.includes(filter)) {
         return this.oneLineEval(buffer);
+      }
+    }
+
+    if (expression.type === 'CallExpression') {
+      // try to autocomplete require and fs methods
+      const callee = buffer.slice(expression.callee.start, expression.callee.end);
+      const evaluateResult = await this.eval(callee, false, true);
+      if (!evaluateResult.exceptionDetails) {
+        await Runtime.callFunctionOn({
+          functionDeclaration: `${(v) => {
+            global.REPL._inspectTarget = v;
+          }}`,
+          arguments: [evaluateResult.result],
+          executionContextId: await mainContextIdPromise,
+        });
+        const { _inspectTarget } = global.REPL;
+        if (_inspectTarget === global.require) {
+          const [specifier] = expression.arguments;
+          if (!specifier) {
+            return [...Module.builtinModules.map((m) => `'${m}')`)];
+          }
+        }
       }
     }
 

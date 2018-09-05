@@ -176,14 +176,19 @@ class IO {
       stdin.setEncoding('utf8');
       this.unpause();
       const handle = async (data) => {
-        for (let i = 0; i < data.length; i += 1) {
-          const { value } = await decoder.next(data[i]);
-          if (value === -1) {
-            process.exit(0);
+        try {
+          for (let i = 0; i < data.length; i += 1) {
+            const { value } = await decoder.next(data[i]);
+            if (value === -1) {
+              process.exit(0);
+            }
+            process._tickCallback();
           }
-          process._tickCallback();
+          stdin.once('data', handle);
+        } catch (e) {
+          console.error(e);
+          process.exit(1);
         }
-        stdin.once('data', handle);
       };
       stdin.once('data', handle);
     })().catch((err) => {
