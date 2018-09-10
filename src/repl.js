@@ -2,6 +2,7 @@
 
 const Module = require('module');
 const util = require('util');
+const { readdir } = require('fs').promises;
 const { parse_dammit: parseDammit } = require('acorn/dist/acorn_loose');
 const IO = require('./io');
 const highlight = require('./highlight');
@@ -204,11 +205,23 @@ Prototype REPL - https://github.com/nodejs/repl`,
           if (!specifier) {
             return [...Module.builtinModules.map((m) => `'${m}')`)];
           }
+          filter = specifier.value;
+          keys = [...Module.builtinModules];
+          try {
+            const { version } = require(`${filter}/package.json`);
+            return ` // ${filter}@${version}`;
+          } catch {} // eslint-disable-line no-empty
+          try {
+            const files = await readdir(filter);
+            keys.unshift(...files.map((f) => `${filter}${f}`));
+          } catch {} // eslint-disable-line no-empty
+          if (keys.includes(filter)) {
+            return this.oneLineEval(buffer);
+          }
+          keys = keys.map((m) => `${m}')`);
         }
       }
-    }
-
-    if (expression.type === 'MemberExpression') {
+    } else if (expression.type === 'MemberExpression') {
       const expr = buffer.slice(expression.object.start, expression.object.end);
       let leadingQuote = false;
       if (expression.computed && expression.property.type === 'Literal') {

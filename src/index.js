@@ -33,8 +33,12 @@ builtinLibs.forEach((name) => {
   });
 });
 
-global.require = require;
-global.module = module;
+{
+  const module = new Module(process.cwd());
+  global.module = module;
+  module._compile('module.exports = require', process.cwd());
+  global.require = module.exports;
+}
 
 global.REPL = {
   time: (fn) => {
