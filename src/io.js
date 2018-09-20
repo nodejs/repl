@@ -167,32 +167,26 @@ class IO {
 
     decoder.next('');
 
+    stdin.setEncoding('utf8');
     stdout.setEncoding('utf8');
 
+    if (stdin.setRawMode) {
+      stdin.setRawMode(true);
+    }
+
+    this.unpause();
+
     (async () => {
-      if (stdin.setRawMode) {
-        stdin.setRawMode(true);
-      }
-      stdin.setEncoding('utf8');
-      this.unpause();
-      const handle = async (data) => {
-        try {
-          for (let i = 0; i < data.length; i += 1) {
-            const { value } = await decoder.next(data[i]);
-            if (value === -1) {
-              process.exit(0);
-            }
-            process._tickCallback();
+      for await (const chunk of stdin) {
+        for (let i = 0; i < chunk.length; i += 1) {
+          const { value } = await decoder.next(chunk[i]);
+          if (value === -1) {
+            process.exit(0);
           }
-          stdin.once('data', handle);
-        } catch (e) {
-          console.error(e);
-          process.exit(1);
         }
-      };
-      stdin.once('data', handle);
-    })().catch((err) => {
-      console.error(err); // eslint-disable-line no-console
+      }
+    })().catch((e) => {
+      console.error(e);
       process.exit(1);
     });
   }
