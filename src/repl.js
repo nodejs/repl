@@ -78,6 +78,8 @@ Prototype REPL - https://github.com/nodejs/repl`,
     );
 
     this.io.setPrefix('> ');
+
+    this.functionCompletionCache = new Map();
   }
 
   async eval(code, awaitPromise = false, bestEffort = false) {
@@ -186,12 +188,36 @@ Prototype REPL - https://github.com/nodejs/repl`,
       }
     }
 
-    if (expression.type === 'CallExpression') {
+    if (expression.type === 'CallExpression' && !buffer.trim().endsWith(')')) {
       // try to autocomplete require and fs methods
       const callee = buffer.slice(expression.callee.start, expression.callee.end);
       const evaluateResult = await this.eval(callee, false, true);
       if (!evaluateResult.exceptionDetails) {
-        const { description } = evaluateResult.result;
+        const { description, objectId } = evaluateResult.result;
+        const hit = this.functionCompletionCache.get(objectId);
+        const finishParams = (params) => {
+          if (expression.arguments.length === params.length) {
+            return undefined;
+          }
+          params = params.slice(expression.arguments.length).join(', ');
+          if (expression.arguments.length > 0) {
+            if (buffer.trim().endsWith(',')) {
+              const spaces = buffer.length - (buffer.lastIndexOf(',') + 1);
+              if (spaces > 0) {
+                return params;
+              }
+              return ` ${params}`;
+            }
+            return `, ${params}`;
+          }
+          return params;
+        };
+        if (hit !== undefined) {
+          const c = finishParams(hit);
+          if (c !== undefined) {
+            return c;
+          }
+        }
         if (description.length < 10000) {
           let parsed = null;
           try {
@@ -205,28 +231,28 @@ Prototype REPL - https://github.com/nodejs/repl`,
             } catch {} // eslint-disable-line no-empty
           }
           if (parsed && parsed.body && parsed.body[0] && parsed.body[0].expression) {
-            const { expression } = parsed.body[0]; // eslint-disable-line no-shadow
+            const expr = parsed.body[0].expression;
             let params;
-            switch (expression.type) {
+            switch (expr.type) {
               case 'ClassExpression': {
-                if (!expression.body.body) {
+                if (!expr.body.body) {
                   break;
                 }
-                const constructor = expression.body.body.find((method) => method.kind === 'constructor');
+                const constructor = expr.body.body.find((method) => method.kind === 'constructor');
                 if (constructor) {
                   ({ params } = constructor.value);
                 }
                 break;
               }
               case 'ObjectExpression':
-                if (!expression.properties[0] || !expression.properties[0].value) {
+                if (!expr.properties[0] || !expr.properties[0].value) {
                   break;
                 }
-                ({ params } = expression.properties[0].value);
+                ({ params } = expr.properties[0].value);
                 break;
               case 'FunctionExpression':
               case 'ArrowFunctionExpression':
-                ({ params } = expression);
+                ({ params } = expr);
                 break;
               default:
                 break;
@@ -252,7 +278,11 @@ Prototype REPL - https://github.com/nodejs/repl`,
                     return '?';
                 }
               });
-              return params.join(', ');
+              this.functionCompletionCache.set(objectId, params);
+              const c = finishParams(params);
+              if (c !== undefined) {
+                return c;
+              }
             }
           }
         }
