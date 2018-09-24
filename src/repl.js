@@ -1,9 +1,8 @@
 'use strict';
 
-const Module = require('module');
 const util = require('util');
-const { readdir } = require('fs').promises;
 const { parse_dammit: parseDammit } = require('acorn/dist/acorn_loose');
+const acorn = require('acorn');
 const IO = require('./io');
 const highlight = require('./highlight');
 const { processTopLevelAwait } = require('./await');
@@ -192,33 +191,70 @@ Prototype REPL - https://github.com/nodejs/repl`,
       const callee = buffer.slice(expression.callee.start, expression.callee.end);
       const evaluateResult = await this.eval(callee, false, true);
       if (!evaluateResult.exceptionDetails) {
-        await Runtime.callFunctionOn({
-          functionDeclaration: `${(v) => {
-            global.REPL._inspectTarget = v;
-          }}`,
-          arguments: [evaluateResult.result],
-          executionContextId: await mainContextIdPromise,
-        });
-        const { _inspectTarget } = global.REPL;
-        if (_inspectTarget === global.require) {
-          const [specifier] = expression.arguments;
-          if (!specifier) {
-            return [...Module.builtinModules.map((m) => `'${m}')`)];
-          }
-          filter = specifier.value;
-          keys = [...Module.builtinModules];
+        const { description } = evaluateResult.result;
+        if (description.length < 10000) {
+          let parsed = null;
           try {
-            const { version } = require(`${filter}/package.json`);
-            return ` // ${filter}@${version}`;
+            // Try to parse as a function, anonymous function, or arrow function.
+            parsed = acorn.parse(`(${description})`, { ecmaVersion: 2019 });
           } catch {} // eslint-disable-line no-empty
-          try {
-            const files = await readdir(filter);
-            keys.unshift(...files.map((f) => `${filter}${f}`));
-          } catch {} // eslint-disable-line no-empty
-          if (keys.includes(filter)) {
-            return this.oneLineEval(buffer);
+          if (!parsed) {
+            try {
+              // Try to parse as a method.
+              parsed = acorn.parse(`({${description}})`, { ecmaVersion: 2019 });
+            } catch {} // eslint-disable-line no-empty
           }
-          keys = keys.map((m) => `${m}')`);
+          if (parsed && parsed.body && parsed.body[0] && parsed.body[0].expression) {
+            const { expression } = parsed.body[0]; // eslint-disable-line no-shadow
+            let params;
+            switch (expression.type) {
+              case 'ClassExpression': {
+                if (!expression.body.body) {
+                  break;
+                }
+                const constructor = expression.body.body.find((method) => method.kind === 'constructor');
+                if (constructor) {
+                  ({ params } = constructor.value);
+                }
+                break;
+              }
+              case 'ObjectExpression':
+                if (!expression.properties[0] || !expression.properties[0].value) {
+                  break;
+                }
+                ({ params } = expression.properties[0].value);
+                break;
+              case 'FunctionExpression':
+              case 'ArrowFunctionExpression':
+                ({ params } = expression);
+                break;
+              default:
+                break;
+            }
+            if (params) {
+              params = params.map(function paramName(param) {
+                switch (param.type) {
+                  case 'Identifier':
+                    return param.name;
+                  case 'AssignmentPattern':
+                    return `?${paramName(param.left)}`;
+                  case 'ObjectPattern': {
+                    const list = param.properties.map((p) => paramName(p.value)).join(', ');
+                    return `{ ${list} }`;
+                  }
+                  case 'ArrayPattern': {
+                    const list = param.elements.map(paramName).join(', ');
+                    return `[ ${list} ]`;
+                  }
+                  case 'RestElement':
+                    return `...${paramName(param.argument)}`;
+                  default:
+                    return '?';
+                }
+              });
+              return params.join(', ');
+            }
+          }
         }
       }
     } else if (expression.type === 'MemberExpression') {
