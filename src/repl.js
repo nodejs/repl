@@ -9,6 +9,7 @@ const { processTopLevelAwait } = require('./await');
 const { Runtime, mainContextIdPromise } = require('./inspector');
 const { strEscape, isIdentifier } = require('./util');
 const isRecoverableError = require('./recoverable');
+const NativeFunctions = require('../vendor/NativeFunctions');
 
 // TODO(devsnek): make more robust
 Error.prepareStackTrace = (err, frames) => {
@@ -218,7 +219,7 @@ Prototype REPL - https://github.com/nodejs/repl`,
             return c;
           }
         }
-        if (description.length < 10000) {
+        if (description.length < 10000 && !description.includes('[native code]')) {
           let parsed = null;
           try {
             // Try to parse as a function, anonymous function, or arrow function.
@@ -283,6 +284,24 @@ Prototype REPL - https://github.com/nodejs/repl`,
               if (c !== undefined) {
                 return c;
               }
+            }
+          }
+        } else if (expression.callee.type === 'MemberExpression') {
+          const receiverSrc = buffer.slice(
+            expression.callee.object.start,
+            expression.callee.object.end,
+          );
+          const { result, exceptionDetails } = await this.eval(receiverSrc, false, true);
+          if (!exceptionDetails) {
+            const receiver = result.className;
+            const { name } = parseDammit(evaluateResult.result.description).body[0].id;
+            const entry = NativeFunctions.find((n) => n.receiver === receiver && n.name === name);
+            if (entry.signatures) {
+              this.functionCompletionCache.set(result.objectId, entry.signatures[0]);
+            }
+            const c = finishParams(entry.signatures[0]);
+            if (c !== undefined) {
+              return c;
             }
           }
         }
