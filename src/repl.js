@@ -9,7 +9,7 @@ const { processTopLevelAwait } = require('./await');
 const { Runtime, mainContextIdPromise } = require('./inspector');
 const { strEscape, isIdentifier } = require('./util');
 const isRecoverableError = require('./recoverable');
-const NativeFunctions = require('../vendor/NativeFunctions');
+const NativeFunctions = require('./NativeFunctions');
 
 // TODO(devsnek): make more robust
 Error.prepareStackTrace = (err, frames) => {
@@ -293,13 +293,15 @@ Prototype REPL - https://github.com/nodejs/repl`,
           );
           const { result, exceptionDetails } = await this.eval(receiverSrc, false, true);
           if (!exceptionDetails) {
-            const receiver = result.className;
+            const receiver = result.type === 'function' ?
+              parseDammit(result.description).body[0].id.name :
+              result.className;
             const { name } = parseDammit(evaluateResult.result.description).body[0].id;
-            const entry = NativeFunctions.find((n) => n.receiver === receiver && n.name === name);
-            if (entry.signatures) {
-              this.functionCompletionCache.set(result.objectId, entry.signatures[0]);
+            const entry = NativeFunctions[receiver][name];
+            if (entry) {
+              this.functionCompletionCache.set(result.objectId, entry[0]);
             }
-            const c = finishParams(entry.signatures[0]);
+            const c = finishParams(entry[0]);
             if (c !== undefined) {
               return c;
             }
