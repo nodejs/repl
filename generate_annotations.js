@@ -64,4 +64,6 @@ program.getSourceFiles().forEach((file) => {
   });
 });
 
+types.globalThis.queueMicrotask = [['callback']];
+
 fs.writeFileSync('./src/NativeFunctions.json', JSON.stringify(types));

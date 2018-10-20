@@ -219,7 +219,17 @@ Prototype REPL - https://github.com/nodejs/repl`,
             return c;
           }
         }
-        if (description.length < 10000 && !description.includes('[native code]')) {
+        if (description.includes('[native code]')) {
+          const { name } = parseDammit(evaluateResult.result.description).body[0].id;
+          const entry = NativeFunctions.globalThis[name];
+          if (entry) {
+            this.functionCompletionCache.set(objectId, entry[0]);
+          }
+          const c = finishParams(entry[0]);
+          if (c !== undefined) {
+            return c;
+          }
+        } else if (description.length < 10000) {
           let parsed = null;
           try {
             // Try to parse as a function, anonymous function, or arrow function.
