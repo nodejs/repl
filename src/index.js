@@ -463,3 +463,7 @@ Prototype REPL - https://github.com/nodejs/repl`,
 );
 
 io.setPrefix('> ');
+
+process.setUncaughtExceptionCaptureCallback((e) => {
+  process.stdout.write(`${inspect(e)}\n> `);
+});
