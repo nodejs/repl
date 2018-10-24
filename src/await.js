@@ -11,6 +11,12 @@ const visitorsWithoutAncestors = {
     }
     walk.base.ClassDeclaration(node, state, c);
   },
+  ForOfStatement(node, state, c) {
+    if (node.await === true) {
+      state.containsAwait = true;
+    }
+    walk.base.ForOfStatement(node, state, c);
+  },
   FunctionDeclaration(node, state) {
     state.prepend(node, `${node.id.name}=`);
   },
@@ -68,7 +74,7 @@ function processTopLevelAwait(src) {
   const wrappedArray = wrapped.split('');
   let root;
   try {
-    root = acorn.parse(wrapped, { ecmaVersion: 8 });
+    root = acorn.parse(wrapped, { ecmaVersion: 2019 });
   } catch (err) {
     return null;
   }
