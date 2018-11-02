@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/nodejs/repl#readme",
   "devDependencies": {
+    "@types/node": "^10.12.2",
     "babel-eslint": "^8.2.3",
     "eslint": "^4.19.1",
     "eslint-config-airbnb": "^16.1.0",

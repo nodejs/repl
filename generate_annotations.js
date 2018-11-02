@@ -2,14 +2,29 @@
 
 const fs = require('fs');
 const ts = require('typescript');
+const Module = require('module');
 
 const HasOwnProperty = Function.call.bind(Object.prototype.hasOwnProperty);
+const needToRequire = new Set();
+const needToIgnore = new Set(['repl', 'domain']);
 
 const program = ts.createProgram([
   require.resolve('typescript/lib/lib.esnext.d.ts'),
 ], { noLib: true });
 
 const annotationMap = new Map();
+
+function arrayEqual(a1, a2) {
+  if (a1.length !== a2.length) {
+    return false;
+  }
+  for (let i = 0; i < a1.length; i += 1) {
+    if (a1[i] !== a2[i]) {
+      return false;
+    }
+  }
+  return true;
+}
 
 function parseTSFunction(receiver, func) {
   let namespace;
@@ -23,16 +38,22 @@ function parseTSFunction(receiver, func) {
       namespace = namespace.prototype;
       key = `${receiver}.prototype`;
     }
-  } else {
+  } else if (!needToIgnore.has(receiver) && Module.builtinModules.includes(receiver)) {
+    needToRequire.add(receiver);
+    namespace = require(receiver);
+  }
+
+  if (!namespace) {
     return;
   }
 
-  const method = namespace[func.name.escapedText];
+  const name = func.name.text || func.name.escapedText;
+  const method = namespace[name];
   if (!method) {
     return;
   }
 
-  key = `${key}.${func.name.escapedText}`;
+  key = `${key}.${name}`;
 
   const args = func.parameters
     .map((p) => {
@@ -47,11 +68,18 @@ function parseTSFunction(receiver, func) {
     })
     .filter((x) => x !== 'this');
 
-  if (annotationMap.has(key)) {
-    annotationMap.get(key).push(args);
-  } else {
-    annotationMap.set(key, [args]);
+  let entry = annotationMap.get(key);
+  if (!entry) {
+    entry = [];
+    annotationMap.set(key, entry);
   }
+
+  // ignore duplicates
+  if (entry.some((a) => arrayEqual(a, args))) {
+    return;
+  }
+
+  entry.push(args);
 }
 
 program.getSourceFiles().forEach((file) => {
@@ -59,13 +87,13 @@ program.getSourceFiles().forEach((file) => {
     if (node.kind === ts.SyntaxKind.InterfaceDeclaration) {
       for (const member of node.members) {
         if (member.kind === ts.SyntaxKind.MethodSignature) {
-          parseTSFunction(node.name.text, member);
+          parseTSFunction(node.name.text || node.name.escapedText, member);
         }
       }
     } else if (node.kind === ts.SyntaxKind.FunctionDeclaration) {
       parseTSFunction('global', node);
     } else if (node.kind === ts.SyntaxKind.ModuleDeclaration) {
-      const receiver = node.name.escapedText;
+      const receiver = node.name.escapedText || node.name.text;
       for (const statement of node.body.statements) {
         if (statement.kind === ts.SyntaxKind.FunctionDeclaration) {
           parseTSFunction(receiver, statement);
@@ -95,6 +123,8 @@ fs.writeFileSync('./src/annotation_map.js', `'use strict';
 // This file maps native methods to their signatures for completion
 // in the repl. if a method isn't listed here, it is either unknown
 // to the generator script, or it doesn't take any arguments.
+
+${[...needToRequire].map((n) => `const ${n} = require('${n}');`).join('\n')}
 
 module.exports = new WeakMap([
 ${out.join(',\n')},
