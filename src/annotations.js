@@ -54,7 +54,7 @@ function generateAnnotationForJsFunction(method) {
           case 'AssignmentPattern':
             return `?${paramName(param.left)}`;
           case 'ObjectPattern': {
-            const list = param.properties.map((p) => paramName(p.value)).join(', ');
+            const list = param.properties.map((p) => `${paramName(p.key)}: ${paramName(p.value)}`).join(', ');
             return `{ ${list} }`;
           }
           case 'ArrayPattern': {
