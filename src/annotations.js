@@ -81,6 +81,12 @@ function completeCall(method, expression, buffer) {
     }
   }
   let [params] = annotationMap.get(method);
+  if (expression.arguments.length >= params.length) {
+    if (params[params.length - 1].startsWith('...')) {
+      return `${params[0]}`;
+    }
+    return [')'];
+  }
   params = params.slice(expression.arguments.length).join(', ');
   if (expression.arguments.length > 0) {
     if (buffer.trim().endsWith(',')) {
