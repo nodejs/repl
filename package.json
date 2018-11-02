@@ -25,7 +25,8 @@
     "eslint-plugin-import": "^2.12.0",
     "eslint-plugin-jsx-a11y": "^6.0.3",
     "eslint-plugin-react": "^7.8.2",
-    "install-peerdeps": "^1.7.0"
+    "install-peerdeps": "^1.7.0",
+    "typescript": "^3.1.6"
   },
   "dependencies": {
     "acorn": "^5.7.1",

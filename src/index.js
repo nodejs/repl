@@ -1,17 +1,17 @@
 #!/usr/bin/env node
+
 'use strict';
 
 const Module = require('module');
 const util = require('util');
 const { parse_dammit: parseDammit } = require('acorn/dist/acorn_loose');
-const acorn = require('acorn');
 const IO = require('./io');
 const highlight = require('./highlight');
 const { processTopLevelAwait } = require('./await');
 const { Runtime, mainContextIdPromise } = require('./inspector');
 const { strEscape, isIdentifier } = require('./util');
 const isRecoverableError = require('./recoverable');
-const NativeFunctions = require('./NativeFunctions');
+const { completeCall } = require('./annotations');
 
 const builtinLibs = Module.builtinModules.filter((x) => !/^_|\//.test(x));
 
@@ -60,8 +60,6 @@ async function collectGlobalNames() {
   } catch (e) {} // eslint-disable-line no-empty
   return keys;
 }
-
-const functionCompletionCache = new Map();
 
 async function performEval(code, awaitPromise = false, bestEffort = false) {
   const expression = wrapObjectLiteralExpressionIfNeeded(code);
@@ -170,132 +168,20 @@ async function onAutocomplete(buffer) {
   }
 
   if (expression.type === 'CallExpression' && !buffer.trim().endsWith(')')) {
-    // try to autocomplete require and fs methods
     const callee = buffer.slice(expression.callee.start, expression.callee.end);
-    const evaluateResult = await performEval(callee, false, true);
-    if (!evaluateResult.exceptionDetails) {
-      const { description, objectId } = evaluateResult.result;
-      const hit = functionCompletionCache.get(objectId);
-      const finishParams = (params) => {
-        if (expression.arguments.length === params.length) {
-          return undefined;
-        }
-        params = params.slice(expression.arguments.length).join(', ');
-        if (expression.arguments.length > 0) {
-          if (buffer.trim().endsWith(',')) {
-            const spaces = buffer.length - (buffer.lastIndexOf(',') + 1);
-            if (spaces > 0) {
-              return params;
-            }
-            return ` ${params}`;
-          }
-          return `, ${params}`;
-        }
-        return params;
-      };
-      if (hit !== undefined) {
-        const c = finishParams(hit);
-        if (c !== undefined) {
-          return c;
-        }
-      }
-      if (description.includes('[native code]')) {
-        const { name } = parseDammit(evaluateResult.result.description).body[0].id;
-        const entry = NativeFunctions.globalThis[name];
-        if (entry) {
-          functionCompletionCache.set(objectId, entry[0]);
-        }
-        const c = finishParams(entry[0]);
-        if (c !== undefined) {
-          return c;
-        }
-      } else if (description.length < 10000) {
-        let parsed = null;
-        try {
-          // Try to parse as a function, anonymous function, or arrow function.
-          parsed = acorn.parse(`(${description})`, { ecmaVersion: 2019 });
-        } catch {} // eslint-disable-line no-empty
-        if (!parsed) {
-          try {
-            // Try to parse as a method.
-            parsed = acorn.parse(`({${description}})`, { ecmaVersion: 2019 });
-          } catch {} // eslint-disable-line no-empty
-        }
-        if (parsed && parsed.body && parsed.body[0] && parsed.body[0].expression) {
-          const expr = parsed.body[0].expression;
-          let params;
-          switch (expr.type) {
-            case 'ClassExpression': {
-              if (!expr.body.body) {
-                break;
-              }
-              const constructor = expr.body.body.find((method) => method.kind === 'constructor');
-              if (constructor) {
-                ({ params } = constructor.value);
-              }
-              break;
-            }
-            case 'ObjectExpression':
-              if (!expr.properties[0] || !expr.properties[0].value) {
-                break;
-              }
-              ({ params } = expr.properties[0].value);
-              break;
-            case 'FunctionExpression':
-            case 'ArrowFunctionExpression':
-              ({ params } = expr);
-              break;
-            default:
-              break;
-          }
-          if (params) {
-            params = params.map(function paramName(param) {
-              switch (param.type) {
-                case 'Identifier':
-                  return param.name;
-                case 'AssignmentPattern':
-                  return `?${paramName(param.left)}`;
-                case 'ObjectPattern': {
-                  const list = param.properties.map((p) => paramName(p.value)).join(', ');
-                  return `{ ${list} }`;
-                }
-                case 'ArrayPattern': {
-                  const list = param.elements.map(paramName).join(', ');
-                  return `[ ${list} ]`;
-                }
-                case 'RestElement':
-                  return `...${paramName(param.argument)}`;
-                default:
-                  return '?';
-              }
-            });
-            functionCompletionCache.set(objectId, params);
-            const c = finishParams(params);
-            if (c !== undefined) {
-              return c;
-            }
-          }
-        }
-      } else if (expression.callee.type === 'MemberExpression') {
-        const receiverSrc = buffer.slice(
-          expression.callee.object.start,
-          expression.callee.object.end,
-        );
-        const { result, exceptionDetails } = await performEval(receiverSrc, false, true);
-        if (!exceptionDetails) {
-          const receiver = result.type === 'function' ?
-            parseDammit(result.description).body[0].id.name :
-            result.className;
-          const { name } = parseDammit(evaluateResult.result.description).body[0].id;
-          const entry = NativeFunctions[receiver][name];
-          if (entry) {
-            functionCompletionCache.set(result.objectId, entry[0]);
-          }
-          const c = finishParams(entry[0]);
-          if (c !== undefined) {
-            return c;
-          }
-        }
+    const { result, exceptionDetails } = await performEval(callee, false, true);
+    if (!exceptionDetails) {
+      await Runtime.callFunctionOn({
+        functionDeclaration: `${(v) => {
+          global.REPL._inspectTarget = v;
+        }}`,
+        arguments: [result],
+        executionContextId: await mainContextIdPromise,
+      });
+      const fn = global.REPL._inspectTarget;
+      const a = completeCall(fn, expression, buffer);
+      if (a !== undefined) {
+        return a;
       }
     }
   } else if (expression.type === 'MemberExpression') {

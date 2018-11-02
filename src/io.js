@@ -186,7 +186,7 @@ class IO {
         }
       }
     })().catch((e) => {
-      console.error(e);
+      console.error(e); // eslint-disable-line no-console
       process.exit(1);
     });
   }
