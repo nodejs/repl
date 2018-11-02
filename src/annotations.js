@@ -80,15 +80,27 @@ function completeCall(method, expression, buffer) {
       return undefined;
     }
   }
-  let [params] = annotationMap.get(method);
-  if (expression.arguments.length >= params.length) {
+  const entry = annotationMap.get(method).slice(0);
+  const target = expression.arguments.length;
+  let params = entry.sort((a, b) => {
+    // find the completion with the closest number of args
+    // to the given expression
+    const Da = Math.abs(target - a.length);
+    const Db = Math.abs(target - b.length);
+    // if the delta is equal, prefer the longer one
+    if (Da === Db) {
+      return b.length - a.length;
+    }
+    return Da - Db;
+  })[0];
+  if (target >= params.length) {
     if (params[params.length - 1].startsWith('...')) {
       return `${params[0]}`;
     }
     return [')'];
   }
-  params = params.slice(expression.arguments.length).join(', ');
-  if (expression.arguments.length > 0) {
+  params = params.slice(target).join(', ');
+  if (target > 0) {
     if (buffer.trim().endsWith(',')) {
       const spaces = buffer.length - (buffer.lastIndexOf(',') + 1);
       if (spaces > 0) {

@@ -112,6 +112,7 @@ for (const [key, value] of annotationMap) {
   if (value.length === 1 && value[0].length === 0) {
     continue; // eslint-disable-line no-continue
   }
+  value.sort((a, b) => a.length - b.length);
   out.push(`  [${key}, ${JSON.stringify(value)}]`);
 }
 
