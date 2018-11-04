@@ -4,6 +4,7 @@
 
 const Module = require('module');
 const util = require('util');
+const path = require('path');
 const { parse_dammit: parseDammit } = require('acorn/dist/acorn_loose');
 const IO = require('./io');
 const highlight = require('./highlight');
@@ -12,6 +13,8 @@ const { Runtime, mainContextIdPromise } = require('./inspector');
 const { strEscape, isIdentifier } = require('./util');
 const isRecoverableError = require('./recoverable');
 const { completeCall } = require('./annotations');
+
+util.inspect.defaultOptions.depth = 2;
 
 const builtinLibs = Module.builtinModules.filter((x) => !/^_|\//.test(x));
 
@@ -287,11 +290,38 @@ builtinLibs.forEach((name) => {
   });
 });
 
+try {
+  // Hack for require.resolve("./relative") to work properly.
+  module.filename = path.resolve('repl');
+} catch (e) {
+  // path.resolve('repl') fails when the current working directory has been
+  // deleted.  Fall back to the directory name of the (absolute) executable
+  // path.  It's not really correct but what are the alternatives?
+  const dirname = path.dirname(process.execPath);
+  module.filename = path.resolve(dirname, 'repl');
+}
+
+// Hack for repl require to work properly with node_modules folders
+module.paths = Module._nodeModulePaths(module.filename);
+
+const parentModule = module;
+
 {
-  const module = new Module(process.cwd());
-  global.module = module;
-  module._compile('module.exports = require', process.cwd());
-  global.require = module.exports;
+  const module = new Module('<repl>');
+  module.paths = Module._resolveLookupPaths('<repl>', parentModule, true) || [];
+  module._compile('module.exports = require;', '<repl>');
+
+  Object.defineProperty(global, 'module', {
+    configurable: true,
+    writable: true,
+    value: module,
+  });
+
+  Object.defineProperty(global, 'require', {
+    configurable: true,
+    writable: true,
+    value: module.exports,
+  });
 }
 
 global.REPL = {
