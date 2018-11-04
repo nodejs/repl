@@ -1,6 +1,7 @@
 'use strict';
 
 const { emitKeys, CSI, cursorTo } = require('./tty');
+const loadHistory = require('./history');
 
 /* eslint-disable no-await-in-loop */
 
@@ -22,7 +23,7 @@ class IO {
     this.onAutocomplete = onAutocomplete;
 
     this.history = [];
-    this.history.index = -1;
+    this.historyIndex = -1;
 
     let closeOnThisOne = false;
 
@@ -133,7 +134,7 @@ class IO {
         }
         default:
           if (s) {
-            this.history.index = -1;
+            this.historyIndex = -1;
             const lines = s.split(/\r\n|\n|\r/);
             for (let i = 0; i < lines.length; i += 1) {
               if (i > 0) {
@@ -143,6 +144,7 @@ class IO {
                   const b = this.buffer;
                   await this.update('', 0);
                   this.history.unshift(b);
+                  await this.writeHistory();
                   const result = await onLine(this.multilineBuffer + b);
                   if (result === IO.kNeedsAnotherLine) {
                     this.multilineBuffer += b;
@@ -177,6 +179,9 @@ class IO {
     this.unpause();
 
     (async () => {
+      const { history, writeHistory } = await loadHistory();
+      this.history = history;
+      this.writeHistory = () => writeHistory(this.history);
       for await (const chunk of stdin) {
         for (let i = 0; i < chunk.length; i += 1) {
           const { value } = await decoder.next(chunk[i]);
@@ -223,22 +228,22 @@ class IO {
   }
 
   async nextHistory() {
-    if (this.history.index <= 0) {
+    if (this.historyIndex < 0) {
       await this.update('', 0);
       return;
     }
-    this.history.index -= 1;
-    const h = this.history[this.history.index];
+    this.historyIndex -= 1;
+    const h = this.history[this.historyIndex] || '';
     await this.update(h, h.length);
   }
 
   async previousHistory() {
-    if (this.history.index >= this.history.length - 1) {
+    if (this.historyIndex >= this.history.length - 1) {
       return;
     }
-    this.history.index += 1;
 
-    const h = this.history[this.history.index];
+    this.historyIndex += 1;
+    const h = this.history[this.historyIndex];
     await this.update(h, h.length);
   }
 
