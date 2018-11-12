@@ -3,6 +3,7 @@
 const emphasize = require('emphasize');
 const chalk = require('chalk');
 
+const windows = process.platform === 'win32';
 const sheet = {
   'comment': chalk.gray,
   'quote': chalk.gray,
@@ -10,7 +11,7 @@ const sheet = {
   'keyword': chalk.green,
   'addition': chalk.green,
 
-  'number': chalk.yellow,
+  'number': windows ? chalk.yellow : chalk.blue,
   'string': chalk.green,
   'meta meta-string': chalk.cyan,
   'literal': chalk.cyan,

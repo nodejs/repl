@@ -15,6 +15,10 @@ const isRecoverableError = require('./recoverable');
 const { completeCall } = require('./annotations');
 
 util.inspect.defaultOptions.depth = 2;
+if (process.platform !== 'win32') {
+  util.inspect.styles.number = 'blue';
+  util.inspect.styles.bigint = 'blue';
+}
 
 const builtinLibs = Module.builtinModules.filter((x) => !/^_|\//.test(x));
 
@@ -266,28 +270,10 @@ async function onAutocomplete(buffer) {
 }
 
 builtinLibs.forEach((name) => {
-  const setReal = (val) => {
-    delete global[name];
-    global[name] = val;
-  };
-
-  Object.defineProperty(global, name, {
-    get: () => {
-      const lib = require(name);
-      delete global[name];
-      Object.defineProperty(global, name, {
-        get: () => lib,
-        set: setReal,
-        configurable: true,
-        enumerable: false,
-      });
-
-      return lib;
-    },
-    set: setReal,
-    configurable: true,
-    enumerable: false,
-  });
+  if (name === 'domain' || name === 'repl') {
+    return;
+  }
+  global[name] = require(name);
 });
 
 try {
