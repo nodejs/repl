@@ -209,9 +209,7 @@ async function onAutocomplete(buffer) {
     if (evaluateResult.result.type !== 'object' &&
         evaluateResult.result.type !== 'undefined' &&
         evaluateResult.result.subtype !== 'null') {
-      evaluateResult = await performEval(
-        `Object(${wrapObjectLiteralExpressionIfNeeded(expr)})`, false, true,
-      );
+      evaluateResult = await performEval(`Object(${wrapObjectLiteralExpressionIfNeeded(expr)})`, false, true);
       if (evaluateResult.exceptionDetails) {
         return undefined;
       }
