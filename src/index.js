@@ -326,7 +326,6 @@ global.REPL = {
   lastError: undefined,
 };
 
-// TODO: scope this
 Object.defineProperties(global, {
   _: {
     enumerable: false,
