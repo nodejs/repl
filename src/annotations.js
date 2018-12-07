@@ -8,19 +8,17 @@ function generateAnnotationForJsFunction(method) {
   if (description.includes('{ [native function] }')) {
     return false;
   }
-  let parsed = null;
+  let expr = null;
   try {
     // Try to parse as a function, anonymous function, or arrow function.
-    parsed = acorn.parse(`(${description})`, { ecmaVersion: 2019 });
-  } catch {} // eslint-disable-line no-empty
-  if (!parsed) {
+    expr = acorn.parse(`(${description})`, { ecmaVersion: 2019 }).body[0].expression;
+  } catch {
     try {
       // Try to parse as a method.
-      parsed = acorn.parse(`({${description}})`, { ecmaVersion: 2019 });
+      expr = acorn.parse(`({${description}})`, { ecmaVersion: 2019 }).body[0].expression;
     } catch {} // eslint-disable-line no-empty
   }
-  if (parsed && parsed.body && parsed.body[0] && parsed.body[0].expression) {
-    const expr = parsed.body[0].expression;
+  if (expr) {
     let params;
     switch (expr.type) {
       case 'ClassExpression': {
