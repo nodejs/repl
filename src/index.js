@@ -126,6 +126,8 @@ async function onLine(line) {
   return inspect(global.REPL.last);
 }
 
+const errorToString = Error.prototype.toString;
+
 async function oneLineEval(source) {
   const { result, exceptionDetails } =
     await performEval(wrapObjectLiteralExpressionIfNeeded(source), false, true);
@@ -141,6 +143,9 @@ async function oneLineEval(source) {
       arguments: [result],
       executionContextId: await mainContextIdPromise,
     });
+    if (util.types.isNativeError(global.REPL._inspectTarget)) {
+      return ` // ${errorToString.call(global.REPL._inspectTarget)}`;
+    }
     const s = util.inspect(global.REPL._inspectTarget, {
       breakLength: Infinity,
       compact: true,
