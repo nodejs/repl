@@ -68,10 +68,11 @@ async function collectGlobalNames() {
   return keys;
 }
 
-async function performEval(code, awaitPromise = false, bestEffort = false) {
+async function performEval(code, awaitPromise = false, bestEffort = false, objectGroup) {
   const expression = wrapObjectLiteralExpressionIfNeeded(code);
   return Runtime.evaluate({
     expression,
+    objectGroup,
     generatePreview: true,
     awaitPromise,
     silent: bestEffort,
@@ -127,10 +128,15 @@ async function onLine(line) {
 }
 
 const errorToString = Error.prototype.toString;
+const AUTOCOMPLETE_OBJECT_GROUP = 'AUTOCOMPLETE_OBJECT_GROUP';
 
 async function oneLineEval(source) {
-  const { result, exceptionDetails } =
-    await performEval(wrapObjectLiteralExpressionIfNeeded(source), false, true);
+  const { result, exceptionDetails } = await performEval(
+    wrapObjectLiteralExpressionIfNeeded(source),
+    false,
+    true,
+    AUTOCOMPLETE_OBJECT_GROUP,
+  );
   if (exceptionDetails) {
     return undefined;
   }
@@ -140,6 +146,7 @@ async function oneLineEval(source) {
       functionDeclaration: `${(v) => {
         global.REPL._inspectTarget = v;
       }}`,
+      objectGroup: AUTOCOMPLETE_OBJECT_GROUP,
       arguments: [result],
       executionContextId: await mainContextIdPromise,
     });
@@ -152,8 +159,14 @@ async function oneLineEval(source) {
       maxArrayLength: 10,
       depth: 1,
     }).trim();
+
+    Runtime.releaseObjectGroup({ objectGroup: AUTOCOMPLETE_OBJECT_GROUP });
+
     return ` // ${s}`;
   }
+
+  Runtime.releaseObjectGroup({ objectGroup: AUTOCOMPLETE_OBJECT_GROUP });
+
   return ` // ${util.inspect(result.value)}`;
 }
 
