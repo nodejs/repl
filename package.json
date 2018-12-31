@@ -5,6 +5,7 @@
   "main": "src/index.js",
   "license": "MIT",
   "scripts": {
+    "prepare": "node ./generate_annotations.js",
     "lint": "eslint src"
   },
   "bin": {
