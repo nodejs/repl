@@ -14,11 +14,26 @@ Goals:
 ## Usage
 
 ### Install
+1. clone `@nodejs/repl` locally
+    ```sh
+    git clone https://github.com/nodejs/repl.git
+    ```
+1. `cd` to the project directory
+    ```sh
+    cd repl
+    ```
+1. install project dependencies (locally)
+    ```sh
+    npm install
+    ```
+1. install `@nodejs/repl` as a global npm package
+    ```sh
+    npm link
+    ```
+
+### Run
 ```sh
-$ npm install -g nodejs/repl
-```
-```sh
-$ node-prototype-repl
+node-prototype-repl
 ```
 
 ## Contributing
