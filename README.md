@@ -15,7 +15,7 @@ Goals:
 
 ### Install
 ```sh
-$ npm install -g nodejs/repl
+$ npm install -g @nodejs/repl
 ```
 ```sh
 $ node-prototype-repl
