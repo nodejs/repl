@@ -768,4 +768,4 @@ module.exports = new WeakMap([
   [http2.createSecureServer, [["?onRequestHandler"],["options","?onRequestHandler"]]],
   [http2.connect, [["authority","?listener"],["authority","?options","?listener"]]],
   [global.queueMicrotask, [["callback"]]],
-]);
+].filter(([key]) => key !== undefined));
