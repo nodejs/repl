@@ -129,5 +129,5 @@ ${[...needToRequire].map((n) => `const ${n} = require('${n}');`).join('\n')}
 
 module.exports = new WeakMap([
 ${out.join(',\n')},
-]);
+].filter(([key]) => key !== undefined));
 `);
