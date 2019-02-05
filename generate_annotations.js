@@ -9,8 +9,13 @@ const needToRequire = new Set();
 const needToIgnore = new Set(['repl', 'domain']);
 
 const program = ts.createProgram([
-  require.resolve('typescript/lib/lib.esnext.d.ts'),
-], { noLib: true });
+  // 'typescript/lib/lib.es5.d.ts',
+  // 'typescript/lib/lib.es2015.d.ts',
+  // 'typescript/lib/lib.es2016.d.ts',
+  // 'typescript/lib/lib.es2017.d.ts',
+  // 'typescript/lib/lib.es2018.d.ts',
+  'typescript/lib/lib.esnext.d.ts',
+].map(require.resolve), { noLib: false });
 
 const annotationMap = new Map();
 
