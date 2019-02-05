@@ -32,8 +32,8 @@ const visitorsWithoutAncestors = {
     walk.base.ReturnStatement(node, state, c);
   },
   VariableDeclaration(node, state, c) {
-    if (node.kind === 'var' ||
-        state.ancestors[state.ancestors.length - 2] === state.body) {
+    if (node.kind === 'var'
+        || state.ancestors[state.ancestors.length - 2] === state.body) {
       if (node.declarations.length === 1) {
         state.replace(node.start, node.start + node.kind.length, 'void');
       } else {

@@ -192,7 +192,7 @@ async function onAutocomplete(buffer) {
     }
   }
 
-  if (expression.type === 'CallExpression' && !buffer.trim().endsWith(')')) {
+  if ((expression.type === 'CallExpression' || expression.type === 'NewExpression') && !buffer.trim().endsWith(')')) {
     const callee = buffer.slice(expression.callee.start, expression.callee.end);
     const { result, exceptionDetails } = await performEval(callee, false, true);
     if (!exceptionDetails) {
@@ -224,9 +224,9 @@ async function onAutocomplete(buffer) {
       return undefined;
     }
 
-    if (evaluateResult.result.type !== 'object' &&
-        evaluateResult.result.type !== 'undefined' &&
-        evaluateResult.result.subtype !== 'null') {
+    if (evaluateResult.result.type !== 'object'
+        && evaluateResult.result.type !== 'undefined'
+        && evaluateResult.result.subtype !== 'null') {
       evaluateResult = await performEval(`Object(${wrapObjectLiteralExpressionIfNeeded(expr)})`, false, true);
       if (evaluateResult.exceptionDetails) {
         return undefined;

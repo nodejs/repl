@@ -32,11 +32,15 @@ function arrayEqual(a1, a2) {
 }
 
 function parseTSFunction(receiver, func) {
+  if (func.parameters.length === 0) {
+    return;
+  }
+
   let namespace;
   let key = receiver;
   if (/Constructor$/.test(receiver)) {
-    namespace = global[receiver.replace(/Constructor$/, '')];
-    key = namespace.name;
+    key = 'global';
+    namespace = global;
   } else if (HasOwnProperty(global, receiver)) {
     namespace = global[receiver];
     if (namespace && namespace.prototype) {
@@ -52,7 +56,13 @@ function parseTSFunction(receiver, func) {
     return;
   }
 
-  const name = func.name.text || func.name.escapedText;
+  let name;
+  if (func.name) {
+    name = func.name.text || func.name.escapedText;
+  } else if (func.type.typeName) {
+    name = func.type.typeName.text || func.type.typeName.escapedText;
+  }
+
   const method = namespace[name];
   if (!method) {
     return;
@@ -92,6 +102,9 @@ program.getSourceFiles().forEach((file) => {
     if (node.kind === ts.SyntaxKind.InterfaceDeclaration) {
       for (const member of node.members) {
         if (member.kind === ts.SyntaxKind.MethodSignature) {
+          parseTSFunction(node.name.text || node.name.escapedText, member);
+        }
+        if (member.kind === ts.SyntaxKind.ConstructSignature) {
           parseTSFunction(node.name.text || node.name.escapedText, member);
         }
       }

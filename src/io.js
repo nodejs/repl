@@ -123,8 +123,8 @@ class IO {
           if (this.cursor === 0) {
             break;
           }
-          const b = this.buffer.slice(0, this.cursor - 1) +
-            this.buffer.slice(this.cursor, this.buffer.length);
+          const b = this.buffer.slice(0, this.cursor - 1)
+            + this.buffer.slice(this.cursor, this.buffer.length);
           await this.update(b, this.cursor - 1);
           break;
         }
@@ -322,8 +322,9 @@ class IO {
 
     const s = `${this._prefix}${b}\u001b[90m${this._suffix}\u001b[39m`;
 
-    this.stdout.write(s.length < this.stdout.columns ?
-      s : `${s.slice(0, this.stdout.columns - 3)}...\u001b[39m`);
+    this.stdout.write(s.length < this.stdout.columns
+      ? s
+      : `${s.slice(0, this.stdout.columns - 3)}...\u001b[39m`);
 
     cursorTo(this.stdout, this.cursor + this._prefix.length);
   }

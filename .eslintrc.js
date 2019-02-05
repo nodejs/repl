@@ -30,7 +30,6 @@ module.exports = {
     'object-curly-newline': 'off',
     'prefer-const': ['error', { destructuring: 'all' }],
     'class-methods-use-this': 'off',
-    'operator-linebreak': ['error', 'after'],
     'implicit-arrow-linebreak': 'off',
     'react/no-this-in-sfc': 'off',
     'import/no-dynamic-require': 'off',
