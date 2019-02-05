@@ -36,11 +36,24 @@ function parseTSFunction(receiver, func) {
     return;
   }
 
+  let name;
+  if (func.name) {
+    name = func.name.text || func.name.escapedText;
+  } else if (func.type.typeName) {
+    name = func.type.typeName.text || func.type.typeName.escapedText;
+  }
+
   let namespace;
   let key = receiver;
   if (/Constructor$/.test(receiver)) {
-    key = 'global';
-    namespace = global;
+    const qn = receiver.replace(/Constructor$/, '');
+    if (qn === name) {
+      namespace = global;
+      key = 'global';
+    } else {
+      namespace = global[qn];
+      key = namespace.name;
+    }
   } else if (HasOwnProperty(global, receiver)) {
     namespace = global[receiver];
     if (namespace && namespace.prototype) {
@@ -56,15 +69,9 @@ function parseTSFunction(receiver, func) {
     return;
   }
 
-  let name;
-  if (func.name) {
-    name = func.name.text || func.name.escapedText;
-  } else if (func.type.typeName) {
-    name = func.type.typeName.text || func.type.typeName.escapedText;
-  }
-
   const method = namespace[name];
   if (!method) {
+    console.debug('could not resolve', receiver, name);
     return;
   }
 
