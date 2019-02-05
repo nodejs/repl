@@ -286,7 +286,7 @@ async function onAutocomplete(buffer) {
 }
 
 builtinLibs.forEach((name) => {
-  if (name === 'domain' || name === 'repl') {
+  if (name === 'domain' || name === 'repl' || name === 'sys') {
     return;
   }
   global[name] = require(name);
