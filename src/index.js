@@ -188,7 +188,7 @@ async function onAutocomplete(buffer) {
     filter = expression.name;
 
     if (keys.includes(filter)) {
-      return oneLineEval(buffer);
+      return [await oneLineEval(buffer)];
     }
   }
 
@@ -252,7 +252,7 @@ async function onAutocomplete(buffer) {
     keys = [...own, ...inherited];
 
     if (keys.includes(filter)) {
-      return oneLineEval(buffer);
+      return [await oneLineEval(buffer)];
     }
 
     if (expression.computed) {
@@ -266,7 +266,7 @@ async function onAutocomplete(buffer) {
             r = r.slice(1);
           }
         }
-        return `${r}]`;
+        return [`${r}]`];
       });
     } else {
       keys = keys.filter(isIdentifier);
@@ -282,7 +282,7 @@ async function onAutocomplete(buffer) {
     return keys;
   }
 
-  return oneLineEval(buffer);
+  return [await oneLineEval(buffer)];
 }
 
 builtinLibs.forEach((name) => {

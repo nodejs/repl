@@ -19,6 +19,7 @@ class IO {
     this._paused = false;
     this.transformBuffer = transformBuffer;
     this.completionList = undefined;
+    this.partialCompletionIndex = -1;
 
     this.onAutocomplete = onAutocomplete;
 
@@ -118,7 +119,15 @@ class IO {
           }
           await this.moveCursor(1);
           break;
-        case 'delete':
+        case 'delete': {
+          if (this.cursor === this.buffer.length) {
+            break;
+          }
+          const b = this.buffer.slice(0, this.cursor)
+            + this.buffer.slice(this.cursor + 1, this.buffer.length);
+          await this.update(b, this.cursor);
+          break;
+        }
         case 'backspace': {
           if (this.cursor === 0) {
             break;
@@ -129,7 +138,7 @@ class IO {
           break;
         }
         case 'tab': {
-          await this.autocomplete();
+          await this.fullAutocomplete();
           break;
         }
         default:
@@ -223,7 +232,7 @@ class IO {
     this._cursor = cursor;
     this._suffix = '';
     this.completionList = undefined;
-    await this.autocomplete();
+    await this.partialAutocomplete();
     await this.flip();
   }
 
@@ -247,29 +256,67 @@ class IO {
     await this.update(h, h.length);
   }
 
-  async autocomplete() {
+  async updateCompletions(f) {
+    try {
+      const c = await this.onAutocomplete(this.buffer);
+      if (c) {
+        this.completionList = c;
+        await f.call(this);
+      }
+    } catch {} // eslint-disable-line no-empty
+  }
+
+  async partialAutocomplete() {
     if (!this.onAutocomplete || !this.buffer) {
       return;
     }
-    if (typeof this.completionList === 'string') {
-      this.setSuffix(this.completionList);
-    } else if (this.completionList && this.completionList.length) {
-      const next = this.completionList.shift();
-      this.setSuffix(next);
-    } else if (this.completionList) {
-      this.completionList = undefined;
-      this.setSuffix();
+    if (this.completionList) {
+      if (this.partialCompletionIndex === this.completionList.length - 1) {
+        this.partialCompletionIndex = 0;
+        this.completionList = undefined;
+        this.setSuffix('');
+      } else {
+        const next = this.completionList[this.partialCompletionIndex];
+        this.partialCompletionIndex += 1;
+        this.setSuffix(next);
+      }
     } else {
-      try {
-        const c = await this.onAutocomplete(this.buffer);
-        if (c) {
-          this.completionList = c;
-          await this.autocomplete();
-        }
-      } catch {} // eslint-disable-line no-empty
+      await this.updateCompletions(this.partialAutocomplete);
       return;
     }
     await this.flip();
+  }
+
+  async fullAutocomplete() {
+    if (!this.onAutocomplete || !this.buffer) {
+      return;
+    }
+    if (this.completionList) {
+      if (this.completionList.length === 1) {
+        await this.update(
+          this.buffer + this.completionList[0],
+          this.cursor + this.completionList[0].length,
+        );
+        this.completionList = undefined;
+      } else if (this.completionList.length > 1) {
+        this.stdout.write('\n');
+        let len = 0;
+        while (this.completionList.length) {
+          const item = this.completionList.shift();
+          len += item.length;
+          if (len >= Math.min(this.stdout.columns, 80)) {
+            len = 0;
+            this.stdout.write('\n');
+          }
+          this.stdout.write(`${item}\n`);
+        }
+        this.completionList = undefined;
+        this.stdout.write('\n');
+        await this.flip();
+      }
+    } else {
+      await this.updateCompletions(this.fullAutocomplete);
+    }
   }
 
   async setPrefix(s = '') {
