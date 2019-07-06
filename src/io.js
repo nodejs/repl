@@ -232,6 +232,7 @@ class IO {
     this._cursor = cursor;
     this._suffix = '';
     this.completionList = undefined;
+    this.partialCompletionIndex = 0;
     await this.partialAutocomplete();
     await this.flip();
   }
@@ -271,7 +272,7 @@ class IO {
       return;
     }
     if (this.completionList) {
-      if (this.partialCompletionIndex === this.completionList.length - 1) {
+      if (this.partialCompletionIndex >= this.completionList.length) {
         this.partialCompletionIndex = 0;
         this.completionList = undefined;
         this.setSuffix('');
@@ -308,7 +309,7 @@ class IO {
             len = 0;
             this.stdout.write('\n');
           }
-          this.stdout.write(`${item}\n`);
+          this.stdout.write(`${this.buffer}${item}\n`);
         }
         this.completionList = undefined;
         this.stdout.write('\n');
