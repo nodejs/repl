@@ -125,6 +125,12 @@ class IO {
           }
           await this.moveCursor(1);
           break;
+        case 'home':
+          await this.moveCursor(-this.buffer.length);
+          break;
+        case 'end':
+          await this.moveCursor(this.buffer.length);
+          break;
         case 'delete': {
           if (this.cursor === this.buffer.length) {
             break;
