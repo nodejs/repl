@@ -188,7 +188,7 @@ async function onAutocomplete(buffer) {
     filter = expression.name;
 
     if (keys.includes(filter)) {
-      return [await oneLineEval(buffer)];
+      return undefined;
     }
   }
 
@@ -252,7 +252,7 @@ async function onAutocomplete(buffer) {
     keys = [...own, ...inherited];
 
     if (keys.includes(filter)) {
-      return [await oneLineEval(buffer)];
+      return undefined;
     }
 
     if (expression.computed) {
@@ -282,7 +282,7 @@ async function onAutocomplete(buffer) {
     return keys;
   }
 
-  return [await oneLineEval(buffer)];
+  return undefined;
 }
 
 builtinLibs.forEach((name) => {
@@ -375,9 +375,20 @@ if (engine !== undefined) {
 
 const io = new IO(
   process.stdout, process.stdin,
-  onLine, onAutocomplete, (s) => highlight(s),
-  `Node.js ${process.version} ${engine || '(Unknown Engine)'}
+  {
+    onLine,
+    onAutocomplete,
+    eagerEval: (source) => {
+      try {
+        return oneLineEval(source);
+      } catch {
+        return undefined;
+      }
+    },
+    transformBuffer: (s) => highlight(s),
+    heading: `Node.js ${process.version} ${engine || '(Unknown Engine)'}
 Prototype REPL - https://github.com/nodejs/repl`,
+  },
 );
 
 io.setPrefix('> ');
