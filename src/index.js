@@ -5,7 +5,7 @@
 const Module = require('module');
 const util = require('util');
 const path = require('path');
-const { parse_dammit: parseDammit } = require('acorn/dist/acorn_loose');
+const acorn = require('acorn-loose');
 const IO = require('./io');
 const highlight = require('./highlight');
 const { processTopLevelAwait } = require('./await');
@@ -175,7 +175,7 @@ async function onAutocomplete(buffer) {
     return collectGlobalNames();
   }
 
-  const statement = parseDammit(buffer).body[0];
+  const statement = acorn.parse(buffer).body[0];
   if (statement.type !== 'ExpressionStatement') {
     return undefined;
   }
@@ -192,7 +192,7 @@ async function onAutocomplete(buffer) {
     }
   }
 
-  if ((expression.type === 'CallExpression' || expression.type === 'NewExpression') && !buffer.trim().endsWith(')')) {
+  if ((expression.type === 'CallExpression' || expression.type === 'NewExpression') && !/\);?$/.test(buffer.trim())) {
     const callee = buffer.slice(expression.callee.start, expression.callee.end);
     const { result, exceptionDetails } = await performEval(callee, false, true);
     if (!exceptionDetails) {

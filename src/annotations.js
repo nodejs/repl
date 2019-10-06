@@ -11,11 +11,11 @@ function generateAnnotationForJsFunction(method) {
   let expr = null;
   try {
     // Try to parse as a function, anonymous function, or arrow function.
-    expr = acorn.parse(`(${description})`, { ecmaVersion: 2019 }).body[0].expression;
+    expr = acorn.parse(`(${description})`, { ecmaVersion: 2020 }).body[0].expression;
   } catch {
     try {
       // Try to parse as a method.
-      expr = acorn.parse(`({${description}})`, { ecmaVersion: 2019 }).body[0].expression;
+      expr = acorn.parse(`({${description}})`, { ecmaVersion: 2020 }).body[0].expression;
     } catch {} // eslint-disable-line no-empty
   }
   if (expr) {
@@ -93,7 +93,7 @@ function completeCall(method, expression, buffer) {
   })[0];
   if (target >= params.length) {
     if (params[params.length - 1].startsWith('...')) {
-      return `${params[0]}`;
+      return [`${params[0]}`];
     }
     return [')'];
   }
@@ -102,13 +102,13 @@ function completeCall(method, expression, buffer) {
     if (buffer.trim().endsWith(',')) {
       const spaces = buffer.length - (buffer.lastIndexOf(',') + 1);
       if (spaces > 0) {
-        return params;
+        return [params];
       }
-      return ` ${params}`;
+      return [` ${params}`];
     }
-    return `, ${params}`;
+    return [`, ${params}`];
   }
-  return params;
+  return [params];
 }
 
 module.exports = { completeCall };

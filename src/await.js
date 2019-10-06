@@ -1,7 +1,7 @@
 'use strict';
 
 const acorn = require('acorn');
-const walk = require('acorn/dist/walk');
+const walk = require('acorn-walk');
 
 const noop = () => {};
 const visitorsWithoutAncestors = {
