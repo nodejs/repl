@@ -204,15 +204,20 @@ class IO {
       this.history = history;
       this.writeHistory = () => writeHistory(this.history);
       for await (const chunk of stdin) {
-        this._paused = true;
+        const maybePaste = chunk.length > 1;
+        if (maybePaste) {
+          this._paused = true;
+        }
         for (let i = 0; i < chunk.length; i += 1) {
           const { value } = await decoder.next(chunk[i]);
           if (value === -1) {
             process.exit(0);
           }
         }
-        this._paused = false;
-        await this.flip();
+        if (maybePaste) {
+          this._paused = false;
+          await this.flip();
+        }
       }
     })().catch((e) => {
       console.error(e); // eslint-disable-line no-console

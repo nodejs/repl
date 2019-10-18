@@ -51,6 +51,7 @@ const Parser = acorn.Parser.extend((P) => class extends P {
       default:
         break;
     }
+
     return super.raise(pos, message);
   }
 });
@@ -68,9 +69,9 @@ function isRecoverableError(code) {
 
   // Try to parse the code with acorn.  If the parse fails, ignore the acorn
   // error and return the recoverable status.
-  const p = new Parser();
+  const p = new Parser({}, code);
   try {
-    p.parse(code);
+    p.parse();
 
     // Odd case: the underlying JS engine (V8, Chakra) rejected this input
     // but Acorn detected no issue.  Presume that additional text won't
