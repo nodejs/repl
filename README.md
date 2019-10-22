@@ -14,12 +14,18 @@ Goals:
 ## Usage
 
 ### Install
+
 ```sh
 $ npm install -g nodejs/repl
 ```
+
 ```sh
 $ node-prototype-repl
 ```
+
+If you want to use this REPL by default, you can point
+`NODE_REPL_EXTERNAL_MODULE` to the restult of
+`which node-prototype-repl`!
 
 ## Contributing
 
