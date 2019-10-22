@@ -1,5 +1,11 @@
 # Node.js REPL Prototype
 
+![](https://gc.gy/39485171.png)
+![](https://gc.gy/39485205.png)
+![](https://gc.gy/39485229.png)
+![](https://gc.gy/39485261.png)
+![](https://gc.gy/39485318.png)
+
 Goals:
 
 - Better debugging and interaction
