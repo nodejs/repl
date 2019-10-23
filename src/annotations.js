@@ -103,7 +103,7 @@ function completeCall(method, expression, buffer) {
   })[0];
   if (target >= params.length) {
     if (params[params.length - 1].startsWith('...')) {
-      return [`${params[0]}`];
+      return [`, ${params[params.length - 1]}`];
     }
     return [')'];
   }
