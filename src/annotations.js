@@ -103,22 +103,22 @@ function completeCall(method, expression, buffer) {
   })[0];
   if (target >= params.length) {
     if (params[params.length - 1].startsWith('...')) {
-      return [`, ${params[params.length - 1]}`];
+      return `, ${params[params.length - 1]}`;
     }
-    return [')'];
+    return ')';
   }
   params = params.slice(target).join(', ');
   if (target > 0) {
     if (buffer.trim().endsWith(',')) {
       const spaces = buffer.length - (buffer.lastIndexOf(',') + 1);
       if (spaces > 0) {
-        return [params];
+        return params;
       }
-      return [` ${params}`];
+      return ` ${params}`;
     }
-    return [`, ${params}`];
+    return `, ${params}`;
   }
-  return [params];
+  return params;
 }
 
 module.exports = { completeCall };

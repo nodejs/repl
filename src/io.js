@@ -321,16 +321,9 @@ class IO {
         this.completionList = undefined;
       } else if (this.completionList.length > 1) {
         this.stdout.write('\n');
-        let len = 0;
-        while (this.completionList.length) {
-          const item = this.completionList.shift();
-          len += item.length;
-          if (len >= Math.min(this.stdout.columns, 80)) {
-            len = 0;
-            this.stdout.write('\n');
-          }
+        this.completionList.forEach((item) => {
           this.stdout.write(`${this.buffer}${item}\n`);
-        }
+        });
         this.completionList = undefined;
         this.stdout.write('\n');
         await this.flip();

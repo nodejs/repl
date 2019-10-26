@@ -194,7 +194,9 @@ async function onAutocomplete(buffer) {
 
   if ((expression.type === 'CallExpression' || expression.type === 'NewExpression') && !/\);?$/.test(buffer.trim())) {
     const callee = buffer.slice(expression.callee.start, expression.callee.end);
-    const { result, exceptionDetails } = await performEval(callee, false, true);
+    const { result, exceptionDetails } = await performEval(
+      callee, false, true, AUTOCOMPLETE_OBJECT_GROUP,
+    );
     if (!exceptionDetails) {
       await Runtime.callFunctionOn({
         functionDeclaration: `${(v) => {
@@ -206,7 +208,7 @@ async function onAutocomplete(buffer) {
       const fn = global.REPL._inspectTarget;
       const a = completeCall(fn, expression, buffer);
       if (a !== undefined) {
-        return a;
+        return [a];
       }
     }
   } else if (expression.type === 'MemberExpression') {
@@ -219,7 +221,7 @@ async function onAutocomplete(buffer) {
       filter = expression.property.name === '✖' ? undefined : expression.property.name;
     }
 
-    let evaluateResult = await performEval(expr, false, true);
+    let evaluateResult = await performEval(expr, false, true, AUTOCOMPLETE_OBJECT_GROUP);
     if (evaluateResult.exceptionDetails) {
       return undefined;
     }
@@ -227,7 +229,10 @@ async function onAutocomplete(buffer) {
     if (evaluateResult.result.type !== 'object'
         && evaluateResult.result.type !== 'undefined'
         && evaluateResult.result.subtype !== 'null') {
-      evaluateResult = await performEval(`Object(${wrapObjectLiteralExpressionIfNeeded(expr)})`, false, true);
+      evaluateResult = await performEval(
+        `Object(${wrapObjectLiteralExpressionIfNeeded(expr)})`,
+        false, true, AUTOCOMPLETE_OBJECT_GROUP,
+      );
       if (evaluateResult.exceptionDetails) {
         return undefined;
       }
