@@ -31,7 +31,7 @@ $ node-prototype-repl
 ```
 
 If you want to use this REPL by default, you can point
-`NODE_REPL_EXTERNAL_MODULE` to the restult of
+`NODE_REPL_EXTERNAL_MODULE` to the result of
 `which node-prototype-repl`!
 
 ## Contributing
