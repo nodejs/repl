@@ -10,7 +10,7 @@ module.exports = async () => {
     const historyPath = path.join(os.homedir(), '.node_repl_history');
     handle = await fs.open(historyPath, 'a+', 0o0600);
     const data = await handle.readFile({ encoding: 'utf8' });
-    const history = data.split(/[\n\r]+/, 1000);
+    const history = data.split(os.EOL, 1000);
     const writeHistory = async (d) => {
       if (!handle) {
         return false;

@@ -69,7 +69,7 @@ function isRecoverableError(code) {
 
   // Try to parse the code with acorn.  If the parse fails, ignore the acorn
   // error and return the recoverable status.
-  const p = new Parser({}, code);
+  const p = new Parser({ ecmaVersion: 2020 }, code);
   try {
     p.parse();
 

@@ -74,7 +74,7 @@ function processTopLevelAwait(src) {
   const wrappedArray = wrapped.split('');
   let root;
   try {
-    root = acorn.parse(wrapped, { ecmaVersion: 2019 });
+    root = acorn.parse(wrapped, { ecmaVersion: 2020 });
   } catch (err) {
     return null;
   }

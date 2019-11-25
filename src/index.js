@@ -175,7 +175,7 @@ async function onAutocomplete(buffer) {
     return collectGlobalNames();
   }
 
-  const statement = acorn.parse(buffer).body[0];
+  const statement = acorn.parse(buffer, { ecmaVersion: 2020 }).body[0];
   if (statement.type !== 'ExpressionStatement') {
     return undefined;
   }
@@ -261,6 +261,9 @@ async function onAutocomplete(buffer) {
     }
 
     if (expression.computed) {
+      if (buffer.endsWith(']')) {
+        return undefined;
+      }
       keys = keys.map((key) => {
         let r;
         if (!leadingQuote && `${+key}` === key) {
@@ -271,7 +274,7 @@ async function onAutocomplete(buffer) {
             r = r.slice(1);
           }
         }
-        return [`${r}]`];
+        return `${r}]`;
       });
     } else {
       keys = keys.filter(isIdentifier);

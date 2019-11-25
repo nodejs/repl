@@ -2,6 +2,7 @@
 
 const { emitKeys, CSI, cursorTo } = require('./tty');
 const loadHistory = require('./history');
+const { getStringWidth } = require('./util');
 
 /* eslint-disable no-await-in-loop */
 
@@ -390,9 +391,12 @@ class IO {
 
     const s = `${this._prefix}${b}\u001b[90m${this._suffix}\u001b[39m`;
 
-    this.stdout.write(s.length < this.stdout.columns
-      ? s
-      : `${s.slice(0, this.stdout.columns - 3)}...\u001b[39m`);
+    const width = getStringWidth(s);
+    if (width < this.stdout.columns) {
+      this.stdout.write(s);
+    } else {
+      this.stdout.write(`${s.slice(0, this.stdout.columns - 3)}...\u001b[39m`);
+    }
 
     cursorTo(this.stdout, this.cursor + this._prefix.length);
   }
