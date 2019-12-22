@@ -161,6 +161,9 @@ class IO {
             for (let i = 0; i < lines.length; i += 1) {
               if (i > 0) {
                 if (this.buffer) {
+                  this.setSuffix('');
+                  await this.flip();
+
                   this.pause();
                   this.stdout.write('\n');
                   const b = this.buffer;
