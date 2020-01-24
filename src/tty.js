@@ -2,39 +2,6 @@
 
 const kEscape = '\x1b';
 
-function CSI(strings, ...args) {
-  let ret = `${kEscape}[`;
-  for (let n = 0; n < strings.length; n += 1) {
-    ret += strings[n];
-    if (n < args.length) {
-      ret += args[n];
-    }
-  }
-  return ret;
-}
-
-CSI.kEscape = kEscape;
-CSI.kClearToBeginning = CSI`1K`;
-CSI.kClearToEnd = CSI`0K`;
-CSI.kClearLine = CSI`2K`;
-CSI.kClearScreenDown = CSI`0J`;
-
-function cursorTo(stream, x, y) {
-  if (stream === null || stream === undefined) {
-    return;
-  }
-
-  if (typeof x !== 'number' && typeof y !== 'number') {
-    return;
-  }
-
-  if (typeof y !== 'number') {
-    stream.write(CSI`${x + 1}G`);
-  } else {
-    stream.write(CSI`${y + 1};${x + 1}H`);
-  }
-}
-
 async function* emitKeys(cb) {
   let ch = yield;
   while (true) {
@@ -305,4 +272,4 @@ async function* emitKeys(cb) {
   }
 }
 
-module.exports = { CSI, cursorTo, emitKeys };
+module.exports = { emitKeys };

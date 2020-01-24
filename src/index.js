@@ -36,7 +36,7 @@ Error.prepareStackTrace = (err, frames) => {
   return `${err}\n    at ${frames.join('\n    at ')}`;
 };
 
-const inspect = (v) => util.inspect(v, { colors: true, showProxy: 2 });
+const inspect = (v) => util.inspect(v, { colors: true, showProxy: true });
 
 // https://cs.chromium.org/chromium/src/third_party/blink/renderer/devtools/front_end/sdk/RuntimeModel.js?l=60-78&rcl=faa083eea5586885cc907ae28928dd766e47b6fa
 function wrapObjectLiteralExpressionIfNeeded(code) {
@@ -151,7 +151,7 @@ async function oneLineEval(source) {
       executionContextId: await mainContextIdPromise,
     });
     if (util.types.isNativeError(global.REPL._inspectTarget)) {
-      return ` // ${errorToString.call(global.REPL._inspectTarget)}`;
+      return errorToString.call(global.REPL._inspectTarget);
     }
     const s = util.inspect(global.REPL._inspectTarget, {
       breakLength: Infinity,
@@ -162,12 +162,12 @@ async function oneLineEval(source) {
 
     Runtime.releaseObjectGroup({ objectGroup: AUTOCOMPLETE_OBJECT_GROUP });
 
-    return ` // ${s}`;
+    return s;
   }
 
   Runtime.releaseObjectGroup({ objectGroup: AUTOCOMPLETE_OBJECT_GROUP });
 
-  return ` // ${util.inspect(result.value)}`;
+  return util.inspect(result.value);
 }
 
 async function onAutocomplete(buffer) {

@@ -1,8 +1,7 @@
 'use strict';
 
-const { emitKeys, CSI, cursorTo } = require('./tty');
+const { emitKeys } = require('./tty');
 const loadHistory = require('./history');
-const { getStringWidth } = require('./util');
 
 /* eslint-disable no-await-in-loop */
 
@@ -65,8 +64,8 @@ class IO {
             await this.moveCursor(1);
             break;
           case 'l':
-            cursorTo(stdout, 0, 0);
-            stdout.write(CSI.kClearScreenDown);
+            this.stdout.cursorTo(0, 0);
+            this.stdout.clearScreenDown();
             await this.flip();
             break;
           case 'n':
@@ -369,8 +368,8 @@ class IO {
   }
 
   clear() {
-    cursorTo(this.stdout, 0);
-    this.stdout.write(CSI.kClearScreenDown);
+    this.stdout.cursorTo(0);
+    this.stdout.clearScreenDown();
   }
 
   async flip() {
@@ -382,23 +381,23 @@ class IO {
 
     const b = this.transformBuffer ? await this.transformBuffer(this.buffer) : this.buffer;
 
+    let suffixOnNewLine = false;
     if (!this._suffix && this.buffer && this.eagerEval) {
       const r = await this.eagerEval(this.buffer);
       if (r) {
+        suffixOnNewLine = true;
         this.setSuffix(r);
       }
     }
 
-    const s = `${this._prefix}${b}\u001b[90m${this._suffix}\u001b[39m`;
-
-    const width = getStringWidth(s);
-    if (width < this.stdout.columns) {
-      this.stdout.write(s);
-    } else {
-      this.stdout.write(`${s.slice(0, this.stdout.columns - 3)}...\u001b[39m`);
+    this.stdout.write(`${this._prefix}${b}`);
+    if (this._suffix) {
+      this.stdout.write(`${suffixOnNewLine ? '\n' : ''}\u001b[90m${this._suffix.slice(0, this.stdout.columns)}\u001b[39m`);
+      if (suffixOnNewLine) {
+        this.stdout.moveCursor(0, -1);
+      }
     }
-
-    cursorTo(this.stdout, this.cursor + this._prefix.length);
+    this.stdout.cursorTo(this.cursor + this._prefix.length);
   }
 }
 
