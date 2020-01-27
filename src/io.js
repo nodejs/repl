@@ -2,6 +2,7 @@
 
 const { emitKeys } = require('./tty');
 const loadHistory = require('./history');
+const { getStringWidth } = require('./util');
 
 /* eslint-disable no-await-in-loop */
 
@@ -285,59 +286,80 @@ class IO {
     await this.update(h, h.length);
   }
 
-  async updateCompletions(f) {
+  async updateCompletions() {
+    if (this.completionList) {
+      return true;
+    }
     try {
       const c = await this.onAutocomplete(this.buffer);
       if (c) {
         this.completionList = c;
-        await f.call(this);
+        return true;
       }
-    } catch {} // eslint-disable-line no-empty
+    } catch {
+      // nothing
+    }
+    return false;
   }
 
   async partialAutocomplete() {
-    if (!this.onAutocomplete || !this.buffer) {
+    if (!this.onAutocomplete || !this.buffer || !await this.updateCompletions()) {
       return;
     }
-    if (this.completionList) {
-      if (this.partialCompletionIndex >= this.completionList.length) {
-        this.partialCompletionIndex = 0;
-        this.completionList = undefined;
-        this.setSuffix('');
-      } else {
-        const next = this.completionList[this.partialCompletionIndex];
-        this.partialCompletionIndex += 1;
-        this.setSuffix(next);
-      }
+    if (this.partialCompletionIndex >= this.completionList.length) {
+      this.partialCompletionIndex = 0;
+      this.completionList = undefined;
+      this.setSuffix('');
     } else {
-      await this.updateCompletions(this.partialAutocomplete);
-      return;
+      const next = this.completionList[this.partialCompletionIndex];
+      this.partialCompletionIndex += 1;
+      this.setSuffix(next);
     }
-    await this.flip();
   }
 
   async fullAutocomplete() {
-    if (!this.onAutocomplete || !this.buffer) {
+    if (!this.onAutocomplete || !this.buffer || !await this.updateCompletions()) {
       return;
     }
-    if (this.completionList) {
-      if (this.completionList.length === 1) {
-        await this.update(
-          this.buffer + this.completionList[0],
-          this.cursor + this.completionList[0].length,
-        );
-        this.completionList = undefined;
-      } else if (this.completionList.length > 1) {
-        this.stdout.write('\n');
-        this.completionList.forEach((item) => {
-          this.stdout.write(`${this.buffer}${item}\n`);
-        });
-        this.completionList = undefined;
-        this.stdout.write('\n');
-        await this.flip();
+    if (this.completionList.length === 1) {
+      await this.update(
+        this.buffer + this.completionList[0],
+        this.cursor + this.completionList[0].length,
+      );
+      this.completionList = undefined;
+    } else if (this.completionList.length > 1) {
+      const completionsWidth = [];
+      const completions = this.completionList.map((completion) => {
+        const s = this.buffer + completion;
+        completionsWidth.push(getStringWidth(s));
+        return s;
+      });
+      const width = Math.max(...completionsWidth) + 2;
+      let maxColumns = Math.floor(this.stdout.columns / width) || 1;
+      if (maxColumns === Infinity) {
+        maxColumns = 1;
       }
-    } else {
-      await this.updateCompletions(this.fullAutocomplete);
+      let output = '\n';
+      let lineIndex = 0;
+      let whitespace = 0;
+      completions.forEach((completion, i) => {
+        if (lineIndex === maxColumns) {
+          output += '\n';
+          lineIndex = 0;
+          whitespace = 0;
+        } else {
+          output += ' '.repeat(whitespace);
+        }
+        output += completion;
+        whitespace = width - completionsWidth[i];
+        lineIndex += 1;
+      });
+      if (lineIndex !== 0) {
+        output += '\n\n';
+      }
+      this.stdout.write(output);
+      this.completionList = undefined;
+      await this.flip();
     }
   }
 
