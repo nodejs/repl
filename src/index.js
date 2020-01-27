@@ -192,33 +192,20 @@ async function onAutocomplete(buffer) {
     }
   }
 
-  if ((expression.type === 'CallExpression' || expression.type === 'NewExpression') && !/\);?$/.test(buffer.trim())) {
-    const callee = buffer.slice(expression.callee.start, expression.callee.end);
-    const { result, exceptionDetails } = await performEval(
-      callee, false, true, AUTOCOMPLETE_OBJECT_GROUP,
-    );
-    if (!exceptionDetails) {
-      await Runtime.callFunctionOn({
-        functionDeclaration: `${(v) => {
-          global.REPL._inspectTarget = v;
-        }}`,
-        arguments: [result],
-        executionContextId: await mainContextIdPromise,
-      });
-      const fn = global.REPL._inspectTarget;
-      const a = completeCall(fn, expression, buffer);
-      if (a !== undefined) {
-        return [a];
-      }
-    }
-  } else if (expression.type === 'MemberExpression') {
+  if (expression.type === 'MemberExpression') {
     const expr = buffer.slice(expression.object.start, expression.object.end);
-    let leadingQuote = false;
     if (expression.computed && expression.property.type === 'Literal') {
-      filter = expression.property.value;
-      leadingQuote = expression.property.raw.startsWith('\'');
-    } else if (!expression.computed && expression.property.type === 'Identifier') {
-      filter = expression.property.name === '✖' ? undefined : expression.property.name;
+      filter = expression.property.raw;
+    } else if (expression.property.type === 'Identifier') {
+      if (expression.property.name === '✖') {
+        filter = undefined;
+      } else if (expression.computed) {
+        return undefined;
+      } else {
+        filter = expression.property.name;
+      }
+    } else {
+      return undefined;
     }
 
     let evaluateResult = await performEval(expr, false, true, AUTOCOMPLETE_OBJECT_GROUP);
@@ -256,29 +243,45 @@ async function onAutocomplete(buffer) {
 
     keys = [...own, ...inherited];
 
-    if (keys.includes(filter)) {
-      return undefined;
-    }
-
     if (expression.computed) {
       if (buffer.endsWith(']')) {
         return undefined;
       }
+
       keys = keys.map((key) => {
         let r;
-        if (!leadingQuote && `${+key}` === key) {
+        if (`${+key}` === key) {
           r = key;
         } else {
           r = strEscape(key);
-          if (leadingQuote) {
-            r = r.slice(1);
-          }
         }
         return `${r}]`;
       });
     } else {
       keys = keys.filter(isIdentifier);
     }
+  }
+
+  if ((expression.type === 'CallExpression' || expression.type === 'NewExpression') && !/\);?$/.test(buffer.trim())) {
+    const callee = buffer.slice(expression.callee.start, expression.callee.end);
+    const { result, exceptionDetails } = await performEval(
+      callee, false, true, AUTOCOMPLETE_OBJECT_GROUP,
+    );
+    if (!exceptionDetails) {
+      await Runtime.callFunctionOn({
+        functionDeclaration: `${(v) => {
+          global.REPL._inspectTarget = v;
+        }}`,
+        arguments: [result],
+        executionContextId: await mainContextIdPromise,
+      });
+      const fn = global.REPL._inspectTarget;
+      const a = completeCall(fn, expression, buffer);
+      if (a !== undefined) {
+        return [a];
+      }
+    }
+    return undefined;
   }
 
   if (keys) {
