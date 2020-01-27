@@ -130,6 +130,12 @@ async function onLine(line) {
 const errorToString = Error.prototype.toString;
 const AUTOCOMPLETE_OBJECT_GROUP = 'AUTOCOMPLETE_OBJECT_GROUP';
 
+const oneLineInspect = (v) => util.inspect(v, {
+  breakLength: Infinity,
+  compact: true,
+  maxArrayLength: 10,
+  depth: 1,
+}).trim();
 async function oneLineEval(source) {
   const { result, exceptionDetails } = await performEval(
     wrapObjectLiteralExpressionIfNeeded(source),
@@ -151,14 +157,12 @@ async function oneLineEval(source) {
       executionContextId: await mainContextIdPromise,
     });
     if (util.types.isNativeError(global.REPL._inspectTarget)) {
-      return errorToString.call(global.REPL._inspectTarget);
+      const s = errorToString.call(global.REPL._inspectTarget);
+      global.REPL._inspectTarget = undefined;
+      return s;
     }
-    const s = util.inspect(global.REPL._inspectTarget, {
-      breakLength: Infinity,
-      compact: true,
-      maxArrayLength: 10,
-      depth: 1,
-    }).trim();
+    const s = oneLineInspect(global.REPL._inspectTarget);
+    global.REPL._inspectTarget = undefined;
 
     Runtime.releaseObjectGroup({ objectGroup: AUTOCOMPLETE_OBJECT_GROUP });
 
@@ -167,7 +171,7 @@ async function oneLineEval(source) {
 
   Runtime.releaseObjectGroup({ objectGroup: AUTOCOMPLETE_OBJECT_GROUP });
 
-  return util.inspect(result.value);
+  return oneLineInspect(result.value);
 }
 
 async function onAutocomplete(buffer) {

@@ -161,24 +161,29 @@ class IO {
             for (let i = 0; i < lines.length; i += 1) {
               if (i > 0) {
                 if (this.buffer) {
+                  let unpaused = false;
+                  if (this.paused) {
+                    this.unpause();
+                    unpaused = true;
+                  }
                   this.setSuffix('');
                   await this.flip();
-                  this.pause();
+                  if (unpaused) {
+                    this.pause();
+                  }
                   this.stdout.write('\n');
-                  const b = this.buffer;
-                  await this.update('', 0);
-                  const result = await onLine(this.multilineBuffer + b);
+                  const result = await onLine(this.multilineBuffer + this.buffer);
                   if (result === IO.kNeedsAnotherLine) {
-                    this.multilineBuffer += `${b}\n`;
+                    this.multilineBuffer += `${this.buffer}\n`;
                     await this.setPrefix('... ');
                   } else {
                     this.stdout.write(`${result}\n`);
                     await this.setPrefix('> ');
-                    this.history.unshift((this.multilineBuffer + b).replace(/\n/g, ' '));
+                    this.history.unshift((this.multilineBuffer + this.buffer).replace(/\n/g, ' '));
                     this.multilineBuffer = '';
                     await this.writeHistory();
                   }
-                  this.unpause();
+                  await this.update('', 0);
                 } else {
                   this.stdout.write('\n');
                 }
