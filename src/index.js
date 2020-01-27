@@ -199,66 +199,69 @@ async function onAutocomplete(buffer) {
     } else if (expression.property.type === 'Identifier') {
       if (expression.property.name === '✖') {
         filter = undefined;
-      } else if (expression.computed) {
-        return undefined;
       } else {
         filter = expression.property.name;
+        if (expression.computed) {
+          keys = await collectGlobalNames();
+        }
       }
     } else {
       return undefined;
     }
 
-    let evaluateResult = await performEval(expr, false, true, AUTOCOMPLETE_OBJECT_GROUP);
-    if (evaluateResult.exceptionDetails) {
-      return undefined;
-    }
-
-    if (evaluateResult.result.type !== 'object'
-        && evaluateResult.result.type !== 'undefined'
-        && evaluateResult.result.subtype !== 'null') {
-      evaluateResult = await performEval(
-        `Object(${wrapObjectLiteralExpressionIfNeeded(expr)})`,
-        false, true, AUTOCOMPLETE_OBJECT_GROUP,
-      );
+    if (!keys) {
+      let evaluateResult = await performEval(expr, false, true, AUTOCOMPLETE_OBJECT_GROUP);
       if (evaluateResult.exceptionDetails) {
         return undefined;
       }
-    }
 
-    const own = [];
-    const inherited = [];
-    (await Runtime.getProperties({
-      objectId: evaluateResult.result.objectId,
-      generatePreview: true,
-    }))
-      .result
-      .filter(({ symbol }) => !symbol)
-      .forEach(({ isOwn, name }) => {
-        if (isOwn) {
-          own.push(name);
-        } else {
-          inherited.push(name);
+      if (evaluateResult.result.type !== 'object'
+          && evaluateResult.result.type !== 'undefined'
+          && evaluateResult.result.subtype !== 'null') {
+        evaluateResult = await performEval(
+          `Object(${wrapObjectLiteralExpressionIfNeeded(expr)})`,
+          false, true, AUTOCOMPLETE_OBJECT_GROUP,
+        );
+        if (evaluateResult.exceptionDetails) {
+          return undefined;
         }
-      });
-
-    keys = [...own, ...inherited];
-
-    if (expression.computed) {
-      if (buffer.endsWith(']')) {
-        return undefined;
       }
 
-      keys = keys.map((key) => {
-        let r;
-        if (`${+key}` === key) {
-          r = key;
-        } else {
-          r = strEscape(key);
+      const own = [];
+      const inherited = [];
+      (await Runtime.getProperties({
+        objectId: evaluateResult.result.objectId,
+        generatePreview: true,
+      }))
+        .result
+        .filter(({ symbol }) => !symbol)
+        .forEach(({ isOwn, name }) => {
+          if (isOwn) {
+            own.push(name);
+          } else {
+            inherited.push(name);
+          }
+        });
+
+      keys = [...own, ...inherited];
+
+      if (expression.computed) {
+        if (buffer.endsWith(']')) {
+          return undefined;
         }
-        return `${r}]`;
-      });
-    } else {
-      keys = keys.filter(isIdentifier);
+
+        keys = keys.map((key) => {
+          let r;
+          if (`${+key}` === key) {
+            r = key;
+          } else {
+            r = strEscape(key);
+          }
+          return `${r}]`;
+        });
+      } else {
+        keys = keys.filter(isIdentifier);
+      }
     }
   }
 
