@@ -164,16 +164,16 @@ class IO {
                   this.stdout.write('\n');
                   const b = this.buffer;
                   await this.update('', 0);
-                  this.history.unshift(b);
-                  await this.writeHistory();
                   const result = await onLine(this.multilineBuffer + b);
                   if (result === IO.kNeedsAnotherLine) {
-                    this.multilineBuffer += b;
+                    this.multilineBuffer += `${b}\n`;
                     await this.setPrefix('... ');
                   } else {
-                    this.multilineBuffer = '';
                     this.stdout.write(`${result}\n`);
                     await this.setPrefix('> ');
+                    this.history.unshift((this.multilineBuffer + b).replace(/\n/g, ' '));
+                    this.multilineBuffer = '';
+                    await this.writeHistory();
                   }
                   this.unpause();
                 } else {
@@ -206,7 +206,7 @@ class IO {
       for await (const chunk of stdin) {
         const maybePaste = chunk.length > 1;
         if (maybePaste) {
-          this._paused = true;
+          this.pause();
         }
         for (let i = 0; i < chunk.length; i += 1) {
           const { value } = await decoder.next(chunk[i]);
@@ -215,7 +215,7 @@ class IO {
           }
         }
         if (maybePaste) {
-          this._paused = false;
+          this.unpause();
           await this.flip();
         }
       }
@@ -383,7 +383,7 @@ class IO {
 
     let suffixOnNewLine = false;
     if (!this._suffix && this.buffer && this.eagerEval) {
-      const r = await this.eagerEval(this.buffer);
+      const r = await this.eagerEval(this.multilineBuffer + this.buffer);
       if (r) {
         suffixOnNewLine = true;
         this.setSuffix(r);

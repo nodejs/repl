@@ -18,68 +18,69 @@ function generateAnnotationForJsFunction(method) {
       expr = acorn.parse(`({${description}})`, { ecmaVersion: 2020 }).body[0].expression;
     } catch {} // eslint-disable-line no-empty
   }
-  if (expr) {
-    let params;
-    switch (expr.type) {
-      case 'ClassExpression': {
-        if (!expr.body.body) {
-          break;
-        }
-        const constructor = expr.body.body.find((m) => m.kind === 'constructor');
-        if (constructor) {
-          ({ params } = constructor.value);
-        }
+  if (!expr) {
+    return false;
+  }
+  let params;
+  switch (expr.type) {
+    case 'ClassExpression': {
+      if (!expr.body.body) {
         break;
       }
-      case 'ObjectExpression':
-        if (!expr.properties[0] || !expr.properties[0].value) {
-          break;
-        }
-        ({ params } = expr.properties[0].value);
-        break;
-      case 'FunctionExpression':
-      case 'ArrowFunctionExpression':
-        ({ params } = expr);
-        break;
-      default:
-        break;
+      const constructor = expr.body.body.find((m) => m.kind === 'constructor');
+      if (constructor) {
+        ({ params } = constructor.value);
+      }
+      break;
     }
-    if (params) {
-      params = params.map(function paramName(param) {
-        switch (param.type) {
-          case 'Identifier':
-            return param.name;
-          case 'AssignmentPattern':
-            return `?${paramName(param.left)}`;
-          case 'ObjectPattern': {
-            const list = param.properties.map((p) => {
-              const k = paramName(p.key);
-              const v = paramName(p.value);
-              if (k === v) {
-                return k;
-              }
-              if (`?${k}` === v) {
-                return `?${k}`;
-              }
-              return `${k}: ${v}`;
-            }).join(', ');
-            return `{ ${list} }`;
-          }
-          case 'ArrayPattern': {
-            const list = param.elements.map(paramName).join(', ');
-            return `[ ${list} ]`;
-          }
-          case 'RestElement':
-            return `...${paramName(param.argument)}`;
-          default:
-            return '?';
-        }
-      });
-      annotationMap.set(method, [params]);
-      return true;
-    }
+    case 'ObjectExpression':
+      if (!expr.properties[0] || !expr.properties[0].value) {
+        break;
+      }
+      ({ params } = expr.properties[0].value);
+      break;
+    case 'FunctionExpression':
+    case 'ArrowFunctionExpression':
+      ({ params } = expr);
+      break;
+    default:
+      break;
   }
-  return false;
+  if (!params) {
+    return false;
+  }
+  params = params.map(function paramName(param) {
+    switch (param.type) {
+      case 'Identifier':
+        return param.name;
+      case 'AssignmentPattern':
+        return `?${paramName(param.left)}`;
+      case 'ObjectPattern': {
+        const list = param.properties.map((p) => {
+          const k = paramName(p.key);
+          const v = paramName(p.value);
+          if (k === v) {
+            return k;
+          }
+          if (`?${k}` === v) {
+            return `?${k}`;
+          }
+          return `${k}: ${v}`;
+        }).join(', ');
+        return `{ ${list} }`;
+      }
+      case 'ArrayPattern': {
+        const list = param.elements.map(paramName).join(', ');
+        return `[ ${list} ]`;
+      }
+      case 'RestElement':
+        return `...${paramName(param.argument)}`;
+      default:
+        return '?';
+    }
+  });
+  annotationMap.set(method, [params]);
+  return true;
 }
 
 function completeCall(method, expression, buffer) {
