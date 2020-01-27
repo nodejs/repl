@@ -291,7 +291,7 @@ class IO {
       return true;
     }
     try {
-      const c = await this.onAutocomplete(this.buffer);
+      const c = await this.onAutocomplete(this.multilineBuffer + this.buffer);
       if (c) {
         this.completionList = c;
         return true;
