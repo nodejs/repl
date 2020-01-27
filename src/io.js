@@ -17,6 +17,7 @@ class IO {
     this._cursor = 0;
     this._prefix = '';
     this._suffix = '';
+    this._suffixOnNewLine = false;
     this.multilineBuffer = '';
 
     this._paused = false;
@@ -250,7 +251,7 @@ class IO {
   async update(buffer, cursor) {
     this._buffer = buffer;
     this._cursor = cursor;
-    this._suffix = '';
+    this.setSuffix('');
     this.completionList = undefined;
     this.partialCompletionIndex = 0;
     await this.partialAutocomplete();
@@ -338,8 +339,9 @@ class IO {
     await this.flip();
   }
 
-  setSuffix(s = '') {
+  setSuffix(s = '', suffixOnNewLine = false) {
     this._suffix = s;
+    this._suffixOnNewLine = suffixOnNewLine;
   }
 
   async appendToBuffer(s) {
@@ -381,22 +383,25 @@ class IO {
 
     const b = this.transformBuffer ? await this.transformBuffer(this.buffer) : this.buffer;
 
-    let suffixOnNewLine = false;
     if (!this._suffix && this.buffer && this.eagerEval) {
       const r = await this.eagerEval(this.multilineBuffer + this.buffer);
       if (r) {
-        suffixOnNewLine = true;
-        this.setSuffix(r);
+        this.setSuffix(r, true);
       }
     }
 
     this.stdout.write(`${this._prefix}${b}`);
+
     if (this._suffix) {
-      this.stdout.write(`${suffixOnNewLine ? '\n' : ''}\u001b[90m${this._suffix.slice(0, this.stdout.columns)}\u001b[39m`);
-      if (suffixOnNewLine) {
+      const s = `\u001b[90m${this._suffix.slice(0, this.stdout.columns)}\u001b[39m`;
+      if (this._suffixOnNewLine) {
+        this.stdout.write(`\n${s}`);
         this.stdout.moveCursor(0, -1);
+      } else {
+        this.stdout.write(s);
       }
     }
+
     this.stdout.cursorTo(this.cursor + this._prefix.length);
   }
 }
