@@ -87,6 +87,14 @@ class IO {
           case 'z':
           case 'd':
             return -1;
+          case 'w':
+            if (this.cursor > 0) {
+              const leading = this.buffer.slice(0, this.cursor);
+              const match = leading.match(/(?:[^\w\s]+|\w+|)\s*$/);
+              const b = this.buffer.slice(0, this.buffer.length - match[0].length);
+              await this.update(b, b.length);
+            }
+            break;
           case 'left':
             if (this.cursor > 0) {
               const leading = this.buffer.slice(0, this.cursor);
