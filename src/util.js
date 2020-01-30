@@ -169,8 +169,34 @@ const getStringWidth = (str, removeControlChars = true) => {
   return width;
 };
 
+const underlineIgnoreANSI = (str, needle) => {
+  let start = -1;
+  outer: // eslint-disable-line no-labels
+  while (true) { // eslint-disable-line no-constant-condition
+    start = str.indexOf(needle[0], start + 1);
+    if (start === -1) {
+      return str;
+    }
+    let strIndex = start;
+    for (let i = 0; i < needle.length; i += 1) {
+      if (needle[i] !== str[strIndex]) {
+        // eslint-disable-next-line no-continue
+        continue outer; // eslint-disable-line no-labels
+      }
+      strIndex += 1;
+      if (str[strIndex] === '\u001b') {
+        // assumes this ansi escape is a mode override (m)
+        strIndex = str.indexOf('m', strIndex) + 1;
+      }
+    }
+    const u = `\u001b[4m${str.slice(start, strIndex)}\u001b[24m`;
+    return str.slice(0, start) + u + str.slice(strIndex);
+  }
+};
+
 module.exports = {
   isIdentifier,
   strEscape,
   getStringWidth,
+  underlineIgnoreANSI,
 };

@@ -2,7 +2,7 @@
 
 const { emitKeys } = require('./tty');
 const loadHistory = require('./history');
-const { getStringWidth } = require('./util');
+const { getStringWidth, underlineIgnoreANSI } = require('./util');
 
 /* eslint-disable no-await-in-loop */
 
@@ -472,7 +472,7 @@ class IO {
         if (this.transformBuffer) {
           match = await this.transformBuffer(match);
         }
-        match = match.replace(this.buffer, `\u001b[4m${this.buffer}\u001b[24m`);
+        match = underlineIgnoreANSI(match, this.buffer);
       }
       this.stdout.write(`${this._prefix}${match || ''}\nreverse-i-search: ${this.buffer}`);
       return;
