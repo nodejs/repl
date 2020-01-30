@@ -6,6 +6,9 @@ const { getStringWidth } = require('./util');
 
 /* eslint-disable no-await-in-loop */
 
+const MODE_NORMAL = 0;
+const MODE_REVERSE_I_SEARCH = 1;
+
 class IO {
   constructor(stdout, stdin, {
     onLine, onAutocomplete, eagerEval,
@@ -13,6 +16,8 @@ class IO {
   } = {}) {
     this.stdin = stdin;
     this.stdout = stdout;
+
+    this.mode = MODE_NORMAL;
 
     this._buffer = '';
     this._cursor = 0;
@@ -41,6 +46,10 @@ class IO {
     }
 
     const decoder = emitKeys(async (s, key) => {
+      if (key.name !== 'c' || !key.ctrl) {
+        closeOnThisOne = false;
+      }
+
       if (key.ctrl) {
         switch (key.name) {
           case 'h':
@@ -66,17 +75,28 @@ class IO {
             await this.moveCursor(1);
             break;
           case 'l':
-            this.stdout.cursorTo(0, 0);
-            this.stdout.clearScreenDown();
-            await this.flip();
+            if (this.mode === MODE_NORMAL) {
+              this.stdout.cursorTo(0, 0);
+              this.stdout.clearScreenDown();
+              await this.flip();
+            }
             break;
           case 'n':
-            await this.nextHistory();
+            if (this.mode === MODE_NORMAL) {
+              await this.nextHistory();
+            }
             break;
           case 'p':
-            await this.previousHistory();
+            if (this.mode === MODE_NORMAL) {
+              await this.previousHistory();
+            }
             break;
           case 'c':
+            if (this.mode === MODE_REVERSE_I_SEARCH) {
+              this.mode = MODE_NORMAL;
+              await this.update('', 0);
+              break;
+            }
             if (closeOnThisOne) {
               return -1;
             }
@@ -109,6 +129,13 @@ class IO {
               await this.moveCursor(match[0].length);
             }
             break;
+          case 'r':
+            if (this.mode === MODE_NORMAL) {
+              this.mode = MODE_REVERSE_I_SEARCH;
+              this.stdout.write('\n');
+              await this.update('', 0);
+            }
+            break;
           default:
             break;
         }
@@ -117,16 +144,20 @@ class IO {
 
       switch (key.name) {
         case 'up':
-          await this.previousHistory();
+          if (this.mode === MODE_NORMAL) {
+            await this.previousHistory();
+          }
           break;
         case 'down':
-          await this.nextHistory();
+          if (this.mode === MODE_NORMAL) {
+            await this.nextHistory();
+          }
           break;
         case 'left':
           await this.moveCursor(-1);
           break;
         case 'right':
-          if (this.cursor === this.buffer.length) {
+          if (this.cursor === this.buffer.length && this.mode === MODE_NORMAL) {
             if (this._suffix && Array.isArray(this.completionList)) {
               this.completionList = undefined;
               await this.update(this.buffer + this._suffix, this.cursor + this._suffix.length);
@@ -159,11 +190,22 @@ class IO {
           await this.update(b, this.cursor - 1);
           break;
         }
-        case 'tab': {
-          await this.fullAutocomplete();
+        case 'tab':
+          if (this.mode === MODE_NORMAL) {
+            await this.fullAutocomplete();
+          }
           break;
-        }
         default:
+          if (this.mode === MODE_REVERSE_I_SEARCH && key.name === 'return') {
+            this.mode = MODE_NORMAL;
+            const match = this.history.find((h) => h.includes(this.buffer));
+            this.stdout.moveCursor(0, -1);
+            this.stdout.cursorTo(0);
+            this.stdout.clearScreenDown();
+            await this.update(match || '', match ? match.length : 0);
+            break;
+          }
+
           if (s) {
             this.historyIndex = -1;
             const lines = s.split(/\r\n|\n|\r/);
@@ -270,7 +312,9 @@ class IO {
     this.setSuffix('');
     this.completionList = undefined;
     this.partialCompletionIndex = 0;
-    await this.partialAutocomplete();
+    if (this.mode === MODE_NORMAL) {
+      await this.partialAutocomplete();
+    }
     await this.flip();
   }
 
@@ -413,6 +457,24 @@ class IO {
 
   async flip() {
     if (this.paused) {
+      return;
+    }
+
+    if (this.mode === MODE_REVERSE_I_SEARCH) {
+      this.stdout.moveCursor(0, -1);
+      this.stdout.cursorTo(0);
+      this.stdout.clearScreenDown();
+      let match;
+      if (this.buffer) {
+        match = this.history.find((h) => h.includes(this.buffer));
+      }
+      if (match) {
+        if (this.transformBuffer) {
+          match = await this.transformBuffer(match);
+        }
+        match = match.replace(this.buffer, `\u001b[4m${this.buffer}\u001b[24m`);
+      }
+      this.stdout.write(`${this._prefix}${match || ''}\nreverse-i-search: ${this.buffer}`);
       return;
     }
 
