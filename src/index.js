@@ -5,6 +5,7 @@
 const Module = require('module');
 const util = require('util');
 const path = require('path');
+// FIXME: acorn-loose parses `a b` as `a; b;`
 const acorn = require('acorn-loose');
 const IO = require('./io');
 const highlight = require('./highlight');
@@ -14,7 +15,6 @@ const { strEscape, isIdentifier } = require('./util');
 const isRecoverableError = require('./recoverable');
 const { completeCall } = require('./annotations');
 
-util.inspect.defaultOptions.depth = 2;
 if (process.platform !== 'win32') {
   util.inspect.styles.number = 'blue';
   util.inspect.styles.bigint = 'blue';
@@ -35,8 +35,6 @@ Error.prepareStackTrace = (err, frames) => {
 
   return `${err}\n    at ${frames.join('\n    at ')}`;
 };
-
-const inspect = (v) => util.inspect(v, { colors: true, showProxy: true });
 
 // https://cs.chromium.org/chromium/src/third_party/blink/renderer/devtools/front_end/sdk/RuntimeModel.js?l=60-78&rcl=faa083eea5586885cc907ae28928dd766e47b6fa
 function wrapObjectLiteralExpressionIfNeeded(code) {
@@ -77,7 +75,7 @@ async function performEval(code, awaitPromise = false, bestEffort = false, objec
     awaitPromise,
     silent: bestEffort,
     throwOnSideEffect: bestEffort,
-    timeout: bestEffort ? 500 : undefined,
+    timeout: bestEffort ? 250 : undefined,
     executionContextId: await mainContextIdPromise,
   });
 }
@@ -90,6 +88,7 @@ async function callFunctionOn(func, remoteObject) {
   });
 }
 
+const inspect = (v) => util.inspect(v, { colors: true, showProxy: true });
 async function onLine(line) {
   let awaited = false;
   if (line.includes('await')) {
@@ -131,6 +130,7 @@ const errorToString = Error.prototype.toString;
 const AUTOCOMPLETE_OBJECT_GROUP = 'AUTOCOMPLETE_OBJECT_GROUP';
 
 const oneLineInspect = (v) => util.inspect(v, {
+  colors: false,
   breakLength: Infinity,
   compact: true,
   maxArrayLength: 10,
@@ -179,8 +179,9 @@ async function onAutocomplete(buffer) {
     return collectGlobalNames();
   }
 
-  const statement = acorn.parse(buffer, { ecmaVersion: 2020 }).body[0];
-  if (statement.type !== 'ExpressionStatement') {
+  const statements = acorn.parse(buffer, { ecmaVersion: 2020 }).body;
+  const statement = statements[statements.length - 1];
+  if (!statement || statement.type !== 'ExpressionStatement') {
     return undefined;
   }
   const { expression } = statement;
@@ -269,7 +270,8 @@ async function onAutocomplete(buffer) {
     }
   }
 
-  if ((expression.type === 'CallExpression' || expression.type === 'NewExpression') && !/\);?$/.test(buffer.trim())) {
+  if ((expression.type === 'CallExpression' || expression.type === 'NewExpression')
+      && !/\)(?:(?:\s+)?;)?(?:\s+)?$/.test(buffer)) {
     const callee = buffer.slice(expression.callee.start, expression.callee.end);
     const { result, exceptionDetails } = await performEval(
       callee, false, true, AUTOCOMPLETE_OBJECT_GROUP,
