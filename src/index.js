@@ -68,16 +68,31 @@ async function collectGlobalNames() {
 
 async function performEval(code, awaitPromise = false, bestEffort = false, objectGroup) {
   const expression = wrapObjectLiteralExpressionIfNeeded(code);
-  return Runtime.evaluate({
-    expression,
-    objectGroup,
-    generatePreview: true,
-    awaitPromise,
-    silent: bestEffort,
-    throwOnSideEffect: bestEffort,
-    timeout: bestEffort ? 250 : undefined,
-    executionContextId: await mainContextIdPromise,
-  });
+  try {
+    const r = await Runtime.evaluate({
+      expression,
+      objectGroup,
+      generatePreview: true,
+      awaitPromise,
+      silent: bestEffort,
+      throwOnSideEffect: bestEffort,
+      timeout: bestEffort ? 250 : undefined,
+      executionContextId: await mainContextIdPromise,
+    });
+    return r;
+  } catch (e) {
+    if (e.code === 'ERR_INSPECTOR_COMMAND') {
+      return {
+        exceptionDetails: {
+          exceptionId: 2 ** 32,
+          text: e.message,
+          lineNumber: 0,
+          columnNumber: 0,
+        },
+      };
+    }
+    throw e;
+  }
 }
 
 async function callFunctionOn(func, remoteObject) {
@@ -181,10 +196,13 @@ async function onAutocomplete(buffer) {
 
   const statements = acorn.parse(buffer, { ecmaVersion: 2020 }).body;
   const statement = statements[statements.length - 1];
-  if (!statement || statement.type !== 'ExpressionStatement') {
+  if (statement.type !== 'ExpressionStatement') {
     return undefined;
   }
-  const { expression } = statement;
+  let { expression } = statement;
+  if (expression.operator === 'void') {
+    expression = expression.argument;
+  }
 
   let keys;
   let filter;
