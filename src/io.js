@@ -94,6 +94,9 @@ class IO {
           case 'c':
             if (this.mode === MODE_REVERSE_I_SEARCH) {
               this.mode = MODE_NORMAL;
+              this.stdout.moveCursor(0, -1);
+              this.stdout.cursorTo(0);
+              this.stdout.clearScreenDown();
               await this.update('', 0);
               break;
             }
@@ -478,8 +481,6 @@ class IO {
       return;
     }
 
-    this.clear();
-
     const b = this.transformBuffer ? await this.transformBuffer(this.buffer) : this.buffer;
 
     if (!this._suffix && this.buffer && this.eagerEval) {
@@ -488,6 +489,8 @@ class IO {
         this.setSuffix(r, true);
       }
     }
+
+    this.clear();
 
     this.stdout.write(`${this._prefix}${b}`);
 

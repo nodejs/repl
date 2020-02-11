@@ -186,12 +186,16 @@ async function oneLineEval(source) {
 
   Runtime.releaseObjectGroup({ objectGroup: AUTOCOMPLETE_OBJECT_GROUP });
 
-  return oneLineInspect(result.value);
+  return result.unserializableValue || oneLineInspect(result.value);
 }
 
 async function onAutocomplete(buffer) {
   if (buffer.length === 0) {
     return collectGlobalNames();
+  }
+
+  if (buffer.endsWith(';')) {
+    return undefined;
   }
 
   const statements = acorn.parse(buffer, { ecmaVersion: 2020 }).body;
@@ -242,7 +246,7 @@ async function onAutocomplete(buffer) {
           && evaluateResult.result.type !== 'undefined'
           && evaluateResult.result.subtype !== 'null') {
         evaluateResult = await performEval(
-          `Object(${wrapObjectLiteralExpressionIfNeeded(expr)})`,
+          `Object(${expr})`,
           false, true, AUTOCOMPLETE_OBJECT_GROUP,
         );
         if (evaluateResult.exceptionDetails) {
