@@ -23,17 +23,19 @@ if (process.platform !== 'win32') {
 const builtinLibs = Module.builtinModules.filter((x) => !/^_|\//.test(x));
 
 // TODO(devsnek): make more robust
-Error.prepareStackTrace = (err, frames) => {
+Error.prepareStackTrace = (e, frames) => {
   const cut = frames.findIndex((f) =>
     !f.getFileName() && !f.getFunctionName()) + 1;
 
   frames = frames.slice(0, cut);
 
+  const eString = Error.prototype.toString.call(e);
+
   if (frames.length === 0) {
-    return `${err}`;
+    return `${eString}`;
   }
 
-  return `${err}\n    at ${frames.join('\n    at ')}`;
+  return `${eString}\n    at ${frames.join('\n    at ')}`;
 };
 
 // https://cs.chromium.org/chromium/src/third_party/blink/renderer/devtools/front_end/sdk/RuntimeModel.js?l=60-78&rcl=faa083eea5586885cc907ae28928dd766e47b6fa
@@ -77,6 +79,7 @@ async function performEval(code, awaitPromise = false, bestEffort = false, objec
       silent: bestEffort,
       throwOnSideEffect: bestEffort,
       timeout: bestEffort ? 250 : undefined,
+      // replMode: true,
       executionContextId: await mainContextIdPromise,
     });
     return r;
