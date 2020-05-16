@@ -20,6 +20,7 @@ if (process.platform !== 'win32') {
   util.inspect.styles.bigint = 'blue';
 }
 
+const errorToString = Error.prototype.toString;
 const builtinLibs = Module.builtinModules.filter((x) => !/^_|\//.test(x));
 
 // TODO(devsnek): make more robust
@@ -29,7 +30,7 @@ Error.prepareStackTrace = (e, frames) => {
 
   frames = frames.slice(0, cut);
 
-  const eString = Error.prototype.toString.call(e);
+  const eString = errorToString.call(e);
 
   if (frames.length === 0) {
     return `${eString}`;
@@ -79,7 +80,6 @@ async function performEval(code, awaitPromise = false, bestEffort = false, objec
       silent: bestEffort,
       throwOnSideEffect: bestEffort,
       timeout: bestEffort ? 250 : undefined,
-      // replMode: true,
       executionContextId: await mainContextIdPromise,
     });
     return r;
@@ -144,7 +144,6 @@ async function onLine(line) {
   return inspect(global.REPL.last);
 }
 
-const errorToString = Error.prototype.toString;
 const AUTOCOMPLETE_OBJECT_GROUP = 'AUTOCOMPLETE_OBJECT_GROUP';
 
 const oneLineInspect = (v) => util.inspect(v, {
@@ -156,7 +155,7 @@ const oneLineInspect = (v) => util.inspect(v, {
 }).trim();
 async function oneLineEval(source) {
   const { result, exceptionDetails } = await performEval(
-    wrapObjectLiteralExpressionIfNeeded(source),
+    source,
     false,
     true,
     AUTOCOMPLETE_OBJECT_GROUP,
