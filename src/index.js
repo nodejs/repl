@@ -365,10 +365,10 @@ async function start(wsUrl) {
       }),
       history.writeHistory(rl.history),
     ]);
-  }
 
-  rl.resume();
-  rl.prompt();
+    rl.resume();
+    rl.prompt();
+  }
 }
 
 const child = spawn(process.execPath, [

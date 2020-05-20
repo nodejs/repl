@@ -79,7 +79,7 @@ function generateAnnotationForJsFunction(method) {
         return '?';
     }
   });
-  annotationMap.set(method, { call: [params] });
+  annotationMap.set(method, { call: [params], construct: [params] });
   return true;
 }
 
