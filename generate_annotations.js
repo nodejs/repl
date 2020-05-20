@@ -91,6 +91,18 @@ function convertSignature(signature) {
   });
 }
 
+function arrayEqual(a1, a2) {
+  if (a1.length !== a2.length) {
+    return false;
+  }
+  for (let i = 0; i < a1.length; i += 1) {
+    if (a1[i] !== a2[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 const out = [];
 
 program.getSourceFile('index.ts').statements.forEach((stmt, i) => {
@@ -109,16 +121,19 @@ program.getSourceFile('index.ts').statements.forEach((stmt, i) => {
     construct: [],
   };
 
-  type.getCallSignatures()
-    .filter((s) => s.parameters.length > 0)
-    .forEach((signature) => {
-      data.call.push(convertSignature(signature));
-    });
-  type.getConstructSignatures()
-    .filter((s) => s.parameters.length > 0)
-    .forEach((signature) => {
-      data.construct.push(convertSignature(signature));
-    });
+  const C = (signatures, a) => {
+    signatures
+      .filter((s) => s.parameters.length > 0)
+      .forEach((signature) => {
+        const s = convertSignature(signature);
+        if (!a.some((e) => arrayEqual(s, e))) {
+          a.push(s);
+        }
+      });
+  };
+
+  C(type.getCallSignatures(), data.call);
+  C(type.getConstructSignatures(), data.construct);
 
   data.call.sort((a, b) => a.length - b.length);
   data.construct.sort((a, b) => a.length - b.length);
