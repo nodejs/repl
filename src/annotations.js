@@ -1,5 +1,8 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+const Module = require('module');
 const acorn = require('acorn');
 const annotationMap = require('./annotation_map.js');
 
@@ -83,12 +86,93 @@ function generateAnnotationForJsFunction(method) {
   return true;
 }
 
+function gracefulOperation(fn, args, alternative) {
+  try {
+    return fn(...args);
+  } catch {
+    return alternative;
+  }
+}
+
 function completeCall(method, expression, buffer) {
+  if (method === globalThis.require) {
+    if (expression.arguments.length > 1) {
+      return ')';
+    }
+    if (expression.arguments.length === 1) {
+      const a = expression.arguments[0];
+      if (a.type !== 'Literal' || typeof a.value !== 'string'
+          || /['"]$/.test(a.value)) {
+        return undefined;
+      }
+    }
+
+    const extensions = Object.keys(require.extensions);
+    const indexes = extensions.map((extension) => `index${extension}`);
+    indexes.push('package.json', 'index');
+    const versionedFileNamesRe = /-\d+\.\d+/;
+
+    const completeOn = expression.arguments[0].value;
+    const subdir = /([\w@./-]+\/)?(?:[\w@./-]*)/m.exec(completeOn)[1] || '';
+    let group = [];
+    let paths = [];
+
+    if (completeOn === '.') {
+      group = ['./', '../'];
+    } else if (completeOn === '..') {
+      group = ['../'];
+    } else if (/^\.\.?\//.test(completeOn)) {
+      paths = [process.cwd()];
+    } else {
+      paths = module.paths.concat(Module.globalPaths);
+    }
+
+    paths.forEach((dir) => {
+      dir = path.resolve(dir, subdir);
+      gracefulOperation(
+        fs.readdirSync,
+        [dir, { withFileTypes: true }],
+        [],
+      ).forEach((dirent) => {
+        if (versionedFileNamesRe.test(dirent.name) || dirent.name === '.npm') {
+          // Exclude versioned names that 'npm' installs.
+          return;
+        }
+        const extension = path.extname(dirent.name);
+        const base = dirent.name.slice(0, -extension.length);
+        if (!dirent.isDirectory()) {
+          if (extensions.includes(extension) && (!subdir || base !== 'index')) {
+            group.push(`${subdir}${base}`);
+          }
+          return;
+        }
+        group.push(`${subdir}${dirent.name}/`);
+        const absolute = path.resolve(dir, dirent.name);
+        const subfiles = gracefulOperation(fs.readdirSync, [absolute], []);
+        for (const subfile of subfiles) {
+          if (indexes.includes(subfile)) {
+            group.push(`${subdir}${dirent.name}`);
+            break;
+          }
+        }
+      });
+    });
+
+    for (const g of group) {
+      if (g.startsWith(completeOn)) {
+        return g.slice(completeOn.length);
+      }
+    }
+
+    return undefined;
+  }
+
   if (!annotationMap.has(method)) {
     if (!generateAnnotationForJsFunction(method)) {
       return undefined;
     }
   }
+
   const entry = annotationMap.get(method)[{
     CallExpression: 'call',
     NewExpression: 'construct',

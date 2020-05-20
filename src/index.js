@@ -160,7 +160,7 @@ async function start(wsUrl) {
       }
       const { result: annotation } = await callFunctionOn(
         `function complete(fn, expression, line) {
-          const { completeCall } = require('./src/annotations');
+          const { completeCall } = require('${require.resolve('./annotations')}');
           const a = completeCall(fn, expression, line);
           return a;
         }`,
