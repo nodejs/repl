@@ -19,20 +19,19 @@
   },
   "homepage": "https://github.com/nodejs/repl#readme",
   "devDependencies": {
-    "@types/node": "^13.12.2",
+    "@types/node": "^13.13.8",
     "babel-eslint": "^10.0.3",
     "eslint": "^6.5.1",
     "eslint-config-airbnb-base": "^14.0.0",
     "eslint-plugin-import": "^2.20.2",
-    "typescript": "^3.8.3"
+    "typescript": "^3.9.2"
   },
   "dependencies": {
-    "acorn": "^7.1.1",
+    "acorn": "^7.2.0",
     "acorn-loose": "^7.0.0",
-    "acorn-walk": "^7.1.1",
-    "benchmark": "^2.1.4",
     "chalk": "^4.0.0",
-    "emphasize": "^3.0.0"
+    "emphasize": "^3.0.0",
+    "ws": "^7.3.0"
   },
   "private": true
 }

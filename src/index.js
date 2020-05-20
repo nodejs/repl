@@ -1,442 +1,393 @@
-#!/usr/bin/env node
-
 'use strict';
 
-const Module = require('module');
-const util = require('util');
-const path = require('path');
-// FIXME: acorn-loose parses `a b` as `a; b;`
+const { createInterface, clearScreenDown } = require('readline');
+const { spawn } = require('child_process');
 const acorn = require('acorn-loose');
-const IO = require('./io');
+const chalk = require('chalk');
+const { Session } = require('./inspector');
+const { isIdentifier, strEscape, underlineIgnoreANSI } = require('./util');
 const highlight = require('./highlight');
-const { processTopLevelAwait } = require('./await');
-const { Runtime, mainContextIdPromise } = require('./inspector');
-const { strEscape, isIdentifier } = require('./util');
-const isRecoverableError = require('./recoverable');
-const { completeCall } = require('./annotations');
+const getHistory = require('./history');
 
-if (process.platform !== 'win32') {
-  util.inspect.styles.number = 'blue';
-  util.inspect.styles.bigint = 'blue';
-}
+const PROMPT = '> ';
 
-const errorToString = Error.prototype.toString;
-const builtinLibs = Module.builtinModules.filter((x) => !/^_|\//.test(x));
+async function start(wsUrl) {
+  const session = await Session.create(wsUrl);
 
-// TODO(devsnek): make more robust
-Error.prepareStackTrace = (e, frames) => {
-  const cut = frames.findIndex((f) =>
-    !f.getFileName() && !f.getFunctionName()) + 1;
-
-  frames = frames.slice(0, cut);
-
-  const eString = errorToString.call(e);
-
-  if (frames.length === 0) {
-    return `${eString}`;
-  }
-
-  return `${eString}\n    at ${frames.join('\n    at ')}`;
-};
-
-// https://cs.chromium.org/chromium/src/third_party/blink/renderer/devtools/front_end/sdk/RuntimeModel.js?l=60-78&rcl=faa083eea5586885cc907ae28928dd766e47b6fa
-function wrapObjectLiteralExpressionIfNeeded(code) {
-  // Only parenthesize what appears to be an object literal.
-  if (!(/^\s*\{/.test(code) && /\}\s*$/.test(code))) {
-    return code;
-  }
-
-  const parse = (async () => 0).constructor;
-  try {
-    // Check if the code can be interpreted as an expression.
-    parse(`return ${code};`);
-
-    // No syntax error! Does it work parenthesized?
-    const wrappedCode = `(${code})`;
-    parse(wrappedCode);
-
-    return wrappedCode;
-  } catch (e) {
-    return code;
-  }
-}
-
-async function collectGlobalNames() {
-  const keys = Object.getOwnPropertyNames(global);
-  try {
-    keys.unshift(...(await Runtime.globalLexicalScopeNames()).names);
-  } catch (e) {} // eslint-disable-line no-empty
-  return keys;
-}
-
-async function performEval(code, awaitPromise = false, bestEffort = false, objectGroup) {
-  const expression = wrapObjectLiteralExpressionIfNeeded(code);
-  try {
-    const r = await Runtime.evaluate({
-      expression,
-      objectGroup,
-      generatePreview: true,
-      awaitPromise,
-      silent: bestEffort,
-      throwOnSideEffect: bestEffort,
-      timeout: bestEffort ? 250 : undefined,
-      executionContextId: await mainContextIdPromise,
-    });
-    return r;
-  } catch (e) {
-    if (e.code === 'ERR_INSPECTOR_COMMAND') {
-      return {
-        exceptionDetails: {
-          exceptionId: 2 ** 32,
-          text: e.message,
-          lineNumber: 0,
-          columnNumber: 0,
-        },
-      };
-    }
-    throw e;
-  }
-}
-
-async function callFunctionOn(func, remoteObject) {
-  return Runtime.callFunctionOn({
-    functionDeclaration: func.toString(),
-    arguments: [remoteObject],
-    executionContextId: await mainContextIdPromise,
+  session.post('Runtime.enable');
+  const [{ context }] = await Session.once(session, 'Runtime.executionContextCreated');
+  const { result: remoteGlobal } = await session.post('Runtime.evaluate', {
+    expression: 'globalThis',
   });
-}
 
-const inspect = (v) => util.inspect(v, { colors: true, showProxy: true });
-async function onLine(line) {
-  let awaited = false;
-  if (line.includes('await')) {
-    const processed = processTopLevelAwait(line);
-    if (processed !== null) {
-      line = processed;
-      awaited = true;
-    }
-  }
+  const getGlobalNames = () => Promise.all([
+    session.post('Runtime.globalLexicalScopeNames')
+      .then((r) => r.names),
+    session.post('Runtime.getProperties', {
+      objectId: remoteGlobal.objectId,
+    }).then((r) => r.result.map((p) => p.name)),
+  ]).then((r) => r.flat());
 
-  const evaluateResult = await performEval(line, awaited);
-
-  if (evaluateResult.exceptionDetails) {
-    const expression = wrapObjectLiteralExpressionIfNeeded(line);
-    if (isRecoverableError(expression)) {
-      return IO.kNeedsAnotherLine;
-    }
-
-    await callFunctionOn(
-      (err) => {
-        global.REPL.lastError = err;
-      },
-      evaluateResult.exceptionDetails.exception,
-    );
-
-    return inspect(global.REPL.lastError);
-  }
-
-  await callFunctionOn(
-    (result) => {
-      global.REPL.last = result;
-    },
-    evaluateResult.result,
-  );
-  return inspect(global.REPL.last);
-}
-
-const AUTOCOMPLETE_OBJECT_GROUP = 'AUTOCOMPLETE_OBJECT_GROUP';
-
-const oneLineInspect = (v) => util.inspect(v, {
-  colors: false,
-  breakLength: Infinity,
-  compact: true,
-  maxArrayLength: 10,
-  depth: 1,
-}).trim();
-async function oneLineEval(source) {
-  const { result, exceptionDetails } = await performEval(
-    source,
-    false,
-    true,
-    AUTOCOMPLETE_OBJECT_GROUP,
-  );
-  if (exceptionDetails) {
-    return undefined;
-  }
-
-  if (result.objectId) {
-    await Runtime.callFunctionOn({
-      functionDeclaration: `${(v) => {
-        global.REPL._inspectTarget = v;
-      }}`,
-      objectGroup: AUTOCOMPLETE_OBJECT_GROUP,
-      arguments: [result],
-      executionContextId: await mainContextIdPromise,
+  const evaluate = (source, throwOnSideEffect) => {
+    const wrapped = /^\s*{/.test(source) && !/;\s*$/.test(source)
+      ? `(${source})`
+      : source;
+    return session.post('Runtime.evaluate', {
+      expression: wrapped,
+      throwOnSideEffect,
+      timeout: throwOnSideEffect ? 200 : undefined,
+      objectGroup: 'OBJECT_GROUP',
     });
-    if (util.types.isNativeError(global.REPL._inspectTarget)) {
-      const s = errorToString.call(global.REPL._inspectTarget);
-      global.REPL._inspectTarget = undefined;
-      return s;
+  };
+
+  const callFunctionOn = (f, args) => session.post('Runtime.callFunctionOn', {
+    executionContextId: context.id,
+    functionDeclaration: f,
+    arguments: args,
+    objectGroup: 'OBJECT_GROUP',
+  });
+
+  const completeLine = async (line, cutLineStart) => {
+    if (line.length === 0) {
+      return getGlobalNames();
     }
-    const s = oneLineInspect(global.REPL._inspectTarget);
-    global.REPL._inspectTarget = undefined;
 
-    Runtime.releaseObjectGroup({ objectGroup: AUTOCOMPLETE_OBJECT_GROUP });
-
-    return s;
-  }
-
-  Runtime.releaseObjectGroup({ objectGroup: AUTOCOMPLETE_OBJECT_GROUP });
-
-  return result.unserializableValue || oneLineInspect(result.value);
-}
-
-async function onAutocomplete(buffer) {
-  if (buffer.length === 0) {
-    return collectGlobalNames();
-  }
-
-  if (buffer.endsWith(';')) {
-    return undefined;
-  }
-
-  const statements = acorn.parse(buffer, { ecmaVersion: 2020 }).body;
-  const statement = statements[statements.length - 1];
-  if (statement.type !== 'ExpressionStatement') {
-    return undefined;
-  }
-  let { expression } = statement;
-  if (expression.operator === 'void') {
-    expression = expression.argument;
-  }
-
-  let keys;
-  let filter;
-  if (expression.type === 'Identifier') {
-    keys = await collectGlobalNames();
-    filter = expression.name;
-
-    if (keys.includes(filter)) {
+    const statements = acorn.parse(line, { ecmaVersion: 2020 }).body;
+    const statement = statements[statements.length - 1];
+    if (statement.type !== 'ExpressionStatement') {
       return undefined;
     }
-  }
+    let { expression } = statement;
+    if (expression.operator === 'void') {
+      expression = expression.argument;
+    }
 
-  if (expression.type === 'MemberExpression') {
-    const expr = buffer.slice(expression.object.start, expression.object.end);
-    if (expression.computed && expression.property.type === 'Literal') {
-      filter = expression.property.raw;
-    } else if (expression.property.type === 'Identifier') {
-      if (expression.property.name === '✖') {
-        filter = undefined;
-      } else {
-        filter = expression.property.name;
-        if (expression.computed) {
-          keys = await collectGlobalNames();
-        }
+    let keys;
+    let filter;
+    if (expression.type === 'Identifier') {
+      keys = await getGlobalNames();
+      filter = expression.name;
+
+      if (keys.includes(filter)) {
+        return undefined;
       }
-    } else {
-      return undefined;
-    }
-
-    if (!keys) {
-      let evaluateResult = await performEval(expr, false, true, AUTOCOMPLETE_OBJECT_GROUP);
-      if (evaluateResult.exceptionDetails) {
+    } else if (expression.type === 'MemberExpression') {
+      const expr = line.slice(expression.object.start, expression.object.end);
+      if (expression.computed && expression.property.type === 'Literal') {
+        filter = expression.property.raw;
+      } else if (expression.property.type === 'Identifier') {
+        if (expression.property.name === '✖') {
+          filter = undefined;
+        } else {
+          filter = expression.property.name;
+          if (expression.computed) {
+            keys = await getGlobalNames();
+          }
+        }
+      } else {
         return undefined;
       }
 
-      if (evaluateResult.result.type !== 'object'
-          && evaluateResult.result.type !== 'undefined'
-          && evaluateResult.result.subtype !== 'null') {
-        evaluateResult = await performEval(
-          `Object(${expr})`,
-          false, true, AUTOCOMPLETE_OBJECT_GROUP,
-        );
+      if (!keys) {
+        let evaluateResult = await evaluate(expr, true);
         if (evaluateResult.exceptionDetails) {
           return undefined;
         }
-      }
 
-      const own = [];
-      const inherited = [];
-      (await Runtime.getProperties({
-        objectId: evaluateResult.result.objectId,
-        generatePreview: true,
-      }))
-        .result
-        .filter(({ symbol }) => !symbol)
-        .forEach(({ isOwn, name }) => {
-          if (isOwn) {
-            own.push(name);
-          } else {
-            inherited.push(name);
+        // Convert inspection target to object.
+        if (evaluateResult.result.type !== 'object'
+            && evaluateResult.result.type !== 'undefined'
+            && evaluateResult.result.subtype !== 'null') {
+          evaluateResult = await evaluate(`Object(${expr})`, true);
+          if (evaluateResult.exceptionDetails) {
+            return undefined;
           }
-        });
+        }
 
-      keys = [...own, ...inherited];
+        const own = [];
+        const inherited = [];
+        (await session.post('Runtime.getProperties', {
+          objectId: evaluateResult.result.objectId,
+          generatePreview: true,
+        }))
+          .result
+          .filter(({ symbol }) => !symbol)
+          .forEach(({ isOwn, name }) => {
+            if (isOwn) {
+              own.push(name);
+            } else {
+              inherited.push(name);
+            }
+          });
 
-      if (expression.computed) {
-        if (buffer.endsWith(']')) {
+        keys = [...own, ...inherited];
+        if (keys.length === 0) {
           return undefined;
         }
 
-        keys = keys.map((key) => {
-          let r;
-          if (`${+key}` === key) {
-            r = key;
-          } else {
-            r = strEscape(key);
+        if (expression.computed) {
+          if (line.endsWith(']')) {
+            return undefined;
           }
-          return `${r}]`;
-        });
-      } else {
-        keys = keys.filter(isIdentifier);
+
+          keys = keys.map((key) => {
+            let r;
+            if (`${+key}` === key) {
+              r = key;
+            } else {
+              r = strEscape(key);
+            }
+            if (cutLineStart) {
+              return `${r}]`;
+            }
+            return r;
+          });
+        } else {
+          keys = keys.filter(isIdentifier);
+        }
       }
-    }
-  }
-
-  if ((expression.type === 'CallExpression' || expression.type === 'NewExpression')
-      && !/\)(?:(?:\s+)?;)?(?:\s+)?$/.test(buffer)) {
-    const callee = buffer.slice(expression.callee.start, expression.callee.end);
-    const { result, exceptionDetails } = await performEval(
-      callee, false, true, AUTOCOMPLETE_OBJECT_GROUP,
-    );
-    if (!exceptionDetails) {
-      await Runtime.callFunctionOn({
-        functionDeclaration: `${(v) => {
-          global.REPL._inspectTarget = v;
-        }}`,
-        arguments: [result],
-        executionContextId: await mainContextIdPromise,
-      });
-      const fn = global.REPL._inspectTarget;
-      const a = completeCall(fn, expression, buffer);
-      if (a !== undefined) {
-        return [a];
-      }
-    }
-    return undefined;
-  }
-
-  if (keys) {
-    if (filter) {
-      return keys
-        .filter((k) => k.startsWith(filter))
-        .map((k) => k.slice(filter.length));
-    }
-    return keys;
-  }
-
-  return undefined;
-}
-
-builtinLibs.forEach((name) => {
-  if (name === 'domain' || name === 'repl' || name === 'sys') {
-    return;
-  }
-  global[name] = require(name);
-});
-
-try {
-  // Hack for require.resolve("./relative") to work properly.
-  module.filename = path.resolve('repl');
-} catch (e) {
-  // path.resolve('repl') fails when the current working directory has been
-  // deleted.  Fall back to the directory name of the (absolute) executable
-  // path.  It's not really correct but what are the alternatives?
-  const dirname = path.dirname(process.execPath);
-  module.filename = path.resolve(dirname, 'repl');
-}
-
-// Hack for repl require to work properly with node_modules folders
-module.paths = Module._nodeModulePaths(module.filename);
-
-const parentModule = module;
-
-{
-  const module = new Module('<repl>');
-  module.paths = Module._resolveLookupPaths('<repl>', parentModule, true) || [];
-  module._compile('module.exports = require;', '<repl>');
-
-  Object.defineProperty(global, 'module', {
-    configurable: true,
-    writable: true,
-    value: module,
-  });
-
-  Object.defineProperty(global, 'require', {
-    configurable: true,
-    writable: true,
-    value: module.exports,
-  });
-}
-
-global.REPL = {
-  time: (fn) => {
-    const { Suite } = require('benchmark');
-    let r;
-    new Suite().add(fn.name, fn)
-      .on('cycle', (event) => {
-        r = event.target;
-        r[util.inspect.custom] = () => String(r);
-      })
-      .run();
-    return r;
-  },
-  last: undefined,
-  lastError: undefined,
-};
-
-Object.defineProperties(global, {
-  _: {
-    enumerable: false,
-    configurable: true,
-    get: () => global.REPL.last,
-    set: (v) => {
-      delete global._;
-      global._ = v;
-    },
-  },
-  _err: {
-    enumerable: false,
-    configurable: true,
-    get: () => global.REPL.lastError,
-    set: (v) => {
-      delete global._err;
-      global._err = v;
-    },
-  },
-});
-
-const engines = [
-  'V8',
-  'ChakraCore',
-];
-
-let engine = engines.find((e) => process.versions[e.toLowerCase()] !== undefined);
-if (engine !== undefined) {
-  engine = `(${engine} ${process.versions[engine.toLowerCase()]})`;
-}
-
-const io = new IO(
-  process.stdout, process.stdin,
-  {
-    onLine,
-    onAutocomplete,
-    eagerEval: (source) => {
-      try {
-        return oneLineEval(source);
-      } catch {
+    } else if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
+      if (line[expression.end - 1] === ')') {
         return undefined;
       }
+      if (!line.slice(expression.callee.end).includes('(')) {
+        return undefined;
+      }
+      const callee = line.slice(expression.callee.start, expression.callee.end);
+      const { result, exceptionDetails } = await evaluate(callee, true);
+      if (exceptionDetails) {
+        return undefined;
+      }
+      const { result: annotation } = await callFunctionOn(
+        `function complete(fn, expression, line) {
+          const { completeCall } = require('./src/annotations');
+          const a = completeCall(fn, expression, line);
+          return a;
+        }`,
+        [result, { value: expression }, { value: line }],
+      );
+      if (annotation.type === 'string') {
+        return [annotation.value];
+      }
+      return undefined;
+    }
+
+    if (keys) {
+      if (filter) {
+        keys = keys.filter((k) => k.startsWith(filter));
+        if (cutLineStart) {
+          keys = keys.map((k) => k.slice(filter.length));
+        }
+      }
+      return keys;
+    }
+
+    return undefined;
+  };
+
+  const getPreview = (line) => evaluate(line, true)
+    .then(({ result, exceptionDetails }) => {
+      if (exceptionDetails) {
+        throw new Error();
+      }
+      return callFunctionOn(
+        `function inspect(v) {
+          const i = util.inspect(v, {
+            colors: false,
+            breakLength: Infinity,
+            compact: true,
+            maxArrayLength: 10,
+            depth: 1,
+          });
+          return i.split('\\n')[0].trim();
+        }`,
+        [result],
+      );
+    })
+    .then(({ result }) => result.value)
+    .catch(() => undefined);
+
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: PROMPT,
+    completer(line, cb) {
+      completeLine(line, false)
+        .then((completions) => {
+          cb(null, [completions || [], line]);
+        })
+        .catch((e) => {
+          cb(e);
+        });
     },
-    transformBuffer: (s) => highlight(s),
-    heading: `Node.js ${process.version} ${engine || '(Unknown Engine)'}
-Prototype REPL - https://github.com/nodejs/repl`,
-  },
-);
+    postprocessor(line) {
+      return highlight(line);
+    },
+  });
+  rl.pause();
 
-io.setPrefix('> ');
+  const history = await getHistory();
+  rl.history = history.history;
 
-process.setUncaughtExceptionCaptureCallback((e) => {
-  process.stdout.write(`${inspect(e)}\n> `);
+  let MODE = 'NORMAL';
+
+  let nextCtrlCKills = false;
+  rl.on('SIGINT', () => {
+    if (MODE === 'REVERSE') {
+      MODE = 'NORMAL';
+      process.stdout.moveCursor(0, -1);
+      process.stdout.cursorTo(0);
+      rl._refreshLine();
+    } else if (rl.line.length) {
+      rl.line = '';
+      rl.cursor = 0;
+      rl._refreshLine();
+    } else if (nextCtrlCKills) {
+      process.exit();
+    } else {
+      nextCtrlCKills = true;
+      process.stdout.write(`\n(To exit, press ^C again)\n${PROMPT}`);
+    }
+  });
+
+  let completionCache;
+  const ttyWrite = rl._ttyWrite.bind(rl);
+  rl._ttyWrite = (d, key) => {
+    if (!(key.ctrl && key.name === 'c')) {
+      nextCtrlCKills = false;
+    }
+
+    if (key.ctrl && key.name === 'r' && MODE === 'NORMAL') {
+      MODE = 'REVERSE';
+      process.stdout.write('\n');
+      rl._refreshLine();
+      return;
+    }
+
+    if (key.name === 'return' && MODE === 'REVERSE') {
+      MODE = 'NORMAL';
+      const match = rl.history.find((h) => h.includes(rl.line));
+      process.stdout.moveCursor(0, -1);
+      process.stdout.cursorTo(0);
+      process.stdout.clearScreenDown();
+      rl.cursor = match.indexOf(rl.line) + rl.line.length;
+      rl.line = match;
+      rl._refreshLine();
+      return;
+    }
+
+    ttyWrite(d, key);
+
+    if (key.name === 'right' && rl.cursor === rl.line.length) {
+      if (completionCache) {
+        rl._insertString(completionCache);
+      }
+    }
+  };
+
+  const refreshLine = rl._refreshLine.bind(rl);
+  rl._refreshLine = () => {
+    completionCache = undefined;
+
+    if (MODE === 'REVERSE') {
+      process.stdout.moveCursor(0, -1);
+      process.stdout.cursorTo(PROMPT.length);
+      clearScreenDown(process.stdout);
+      let match;
+      if (rl.line) {
+        match = rl.history.find((h) => h.includes(rl.line));
+      }
+      if (match) {
+        match = highlight(match);
+        match = underlineIgnoreANSI(match, rl.line);
+      }
+      process.stdout.write(`${match || ''}\n(reverse-i-search): ${rl.line}`);
+      process.stdout.cursorTo('(reverse-i-search): '.length + rl.cursor);
+      return;
+    }
+
+    refreshLine();
+
+    if (rl.line !== '') {
+      process.stdout.cursorTo(PROMPT.length + rl.line.length);
+      clearScreenDown(process.stdout);
+      process.stdout.cursorTo(PROMPT.length + rl.cursor);
+
+      const inspectedLine = rl.line;
+      Promise.all([
+        completeLine(inspectedLine, true),
+        getPreview(inspectedLine),
+      ])
+        .then(([completion, preview]) => {
+          if (rl.line !== inspectedLine) {
+            return;
+          }
+          if (completion && completion.length > 0) {
+            ([completionCache] = completion);
+            process.stdout.cursorTo(PROMPT.length + rl.line.length);
+            process.stdout.write(chalk.grey(completion[0]));
+          }
+          if (preview) {
+            process.stdout.write(`\n${chalk.grey(preview.slice(0, process.stdout.columns - 1))}`);
+            process.stdout.moveCursor(0, -1);
+          }
+          if (completion || preview) {
+            process.stdout.cursorTo(PROMPT.length + rl.cursor);
+          }
+        });
+    }
+  };
+
+  rl.resume();
+  rl.prompt();
+  for await (const line of rl) {
+    rl.pause();
+    clearScreenDown(process.stdout);
+
+    const { result, exceptionDetails } = await evaluate(line);
+    const uncaught = !!exceptionDetails;
+
+    const { result: inspected } = await callFunctionOn(
+      `function inspect(v) {
+        return util.inspect(v, {
+          colors: true,
+          showProxy: true,
+        });
+      }`,
+      [result],
+    );
+
+    process.stdout.write(`${uncaught ? 'Uncaught: ' : ''}${inspected.value}\n`);
+
+    await Promise.all([
+      session.post('Runtime.releaseObjectGroup', {
+        objectGroup: 'OBJECT_GROUP',
+      }),
+      history.writeHistory(rl.history),
+    ]);
+  }
+
+  rl.resume();
+  rl.prompt();
+}
+
+const child = spawn(process.execPath, [
+  '--inspect-publish-uid=http',
+  require.resolve('./stub.js'),
+], {
+  cwd: process.cwd(),
+  windowsHide: true,
+});
+
+child.stdout.on('data', (data) => {
+  process.stdout.write(data);
+});
+
+child.stderr.on('data', (data) => {
+  const s = data.toString();
+  if (s.startsWith('__DEBUGGER_URL__')) {
+    start(s.split(' ')[1]);
+  } else if (s !== 'Debugger attached.\n') {
+    process.stderr.write(data);
+  }
 });

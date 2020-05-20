@@ -20,7 +20,7 @@ module.exports = async () => {
         await handle.writeFile(d.join(os.EOL));
         return true;
       } catch {
-        await handle.close();
+        handle.close().catch(() => undefined);
         handle = null;
         return false;
       }

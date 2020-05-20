@@ -79,7 +79,7 @@ function generateAnnotationForJsFunction(method) {
         return '?';
     }
   });
-  annotationMap.set(method, [params]);
+  annotationMap.set(method, { call: [params] });
   return true;
 }
 
@@ -89,7 +89,10 @@ function completeCall(method, expression, buffer) {
       return undefined;
     }
   }
-  const entry = annotationMap.get(method).slice(0);
+  const entry = annotationMap.get(method)[{
+    CallExpression: 'call',
+    NewExpression: 'construct',
+  }[expression.type]].slice(0);
   const target = expression.arguments.length;
   let params = entry.sort((a, b) => {
     // find the completion with the closest number of args

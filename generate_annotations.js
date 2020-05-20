@@ -1,145 +1,130 @@
 'use strict';
 
 const fs = require('fs');
-const ts = require('typescript');
 const Module = require('module');
+const ts = require('typescript');
 
-const HasOwnProperty = Function.call.bind(Object.prototype.hasOwnProperty);
-const needToRequire = new Set();
-const needToIgnore = new Set(['repl', 'domain']);
+const functions = [];
 
-const program = ts.createProgram([
-  // 'typescript/lib/lib.es5.d.ts',
-  // 'typescript/lib/lib.es2015.d.ts',
-  // 'typescript/lib/lib.es2016.d.ts',
-  // 'typescript/lib/lib.es2017.d.ts',
-  // 'typescript/lib/lib.es2018.d.ts',
-  'typescript/lib/lib.esnext.d.ts',
-].map(require.resolve), { noLib: false });
-
-const annotationMap = new Map();
-
-function arrayEqual(a1, a2) {
-  if (a1.length !== a2.length) {
-    return false;
+const scanned = new Set([
+  process.mainModule,
+]);
+const scan = (ns, path) => {
+  if (scanned.has(ns)) {
+    return;
   }
-  for (let i = 0; i < a1.length; i += 1) {
-    if (a1[i] !== a2[i]) {
-      return false;
+  if (path === 'globalThis.Buffer') {
+    return;
+  }
+  scanned.add(ns);
+  if (typeof ns === 'function') {
+    functions.push(path);
+  }
+  if (typeof ns !== 'function' && (typeof ns !== 'object' || ns === null)) {
+    return;
+  }
+
+  Reflect.ownKeys(ns).forEach((name) => {
+    if (typeof name === 'string' && name.startsWith('_')) {
+      return;
     }
-  }
-  return true;
-}
-
-function parseTSFunction(receiver, func) {
-  if (func.parameters.length === 0) {
-    return;
-  }
-
-  let name;
-  if (func.name) {
-    name = func.name.text || func.name.escapedText;
-  } else if (func.type.typeName) {
-    name = func.type.typeName.text || func.type.typeName.escapedText;
-  }
-
-  let namespace;
-  let key = receiver;
-  if (/Constructor$/.test(receiver)) {
-    const qn = receiver.replace(/Constructor$/, '');
-    if (qn === name) {
-      namespace = global;
-      key = 'global';
-    } else {
-      namespace = global[qn];
-      key = namespace.name;
+    try {
+      ns[name];
+    } catch {
+      return;
     }
-  } else if (HasOwnProperty(global, receiver)) {
-    namespace = global[receiver];
-    if (namespace && namespace.prototype) {
-      namespace = namespace.prototype;
-      key = `${receiver}.prototype`;
-    }
-  } else if (!needToIgnore.has(receiver) && Module.builtinModules.includes(receiver)) {
-    needToRequire.add(receiver);
-    namespace = require(receiver);
-  }
-
-  if (!namespace) {
-    return;
-  }
-
-  const method = namespace[name];
-  if (!method) {
-    console.debug('could not resolve', receiver, name);
-    return;
-  }
-
-  key = `${key}.${name}`;
-
-  const args = func.parameters
-    .map((p) => {
-      let text = p.name.escapedText;
-      if (p.questionToken) {
-        text = `?${text}`;
-      }
-      if (p.dotDotDotToken) {
-        text = `...${text}`;
-      }
-      return text;
-    })
-    .filter((x) => x !== 'this');
-
-  let entry = annotationMap.get(key);
-  if (!entry) {
-    entry = [];
-    annotationMap.set(key, entry);
-  }
-
-  // ignore duplicates
-  if (entry.some((a) => arrayEqual(a, args))) {
-    return;
-  }
-
-  entry.push(args);
-}
-
-program.getSourceFiles().forEach((file) => {
-  ts.forEachChild(file, (node) => {
-    if (node.kind === ts.SyntaxKind.InterfaceDeclaration) {
-      for (const member of node.members) {
-        if (member.kind === ts.SyntaxKind.MethodSignature) {
-          parseTSFunction(node.name.text || node.name.escapedText, member);
-        }
-        if (member.kind === ts.SyntaxKind.ConstructSignature) {
-          parseTSFunction(node.name.text || node.name.escapedText, member);
-        }
-      }
-    } else if (node.kind === ts.SyntaxKind.FunctionDeclaration) {
-      parseTSFunction('global', node);
-    } else if (node.kind === ts.SyntaxKind.ModuleDeclaration) {
-      const receiver = node.name.escapedText || node.name.text;
-      for (const statement of node.body.statements) {
-        if (statement.kind === ts.SyntaxKind.FunctionDeclaration) {
-          parseTSFunction(receiver, statement);
-        }
+    if (typeof name === 'symbol') {
+      if (name.description.startsWith('Symbol')) {
+        scan(ns[name], `${path}[${name.description}]`);
       }
     } else {
-      // console.log(Object.entries(ts.SyntaxKind).find(e => e[1] === node.kind), node);
+      scan(ns[name], `${path}.${name}`);
     }
   });
+};
+
+scan(globalThis, 'globalThis');
+
+const required = new Set();
+const forbidden = new Set(['repl', 'domain', 'sys', 'module']);
+Module.builtinModules.forEach((m) => {
+  if (m.startsWith('_') || m.includes('/') || forbidden.has(m)) {
+    return;
+  }
+  required.add(m);
+  scan(require(m), m);
 });
 
-annotationMap.set('global.queueMicrotask', [['callback']]);
+const compilerOptions = {
+  lib: ['lib.esnext.d.ts', 'lib.dom.d.ts'],
+  types: ['node'],
+  target: ts.ScriptTarget.Latest,
+  strict: true,
+};
+const host = ts.createCompilerHost(compilerOptions);
+const originalReadFile = host.readFile;
+host.readFile = (name) => {
+  if (name === 'index.ts') {
+    return `
+    ${[...required].map((r) => `import * as ${r} from '${r}';`).join('\n')}
+    ${functions.join('\n')}
+    `;
+  }
+  return originalReadFile.call(host, name);
+};
+host.writeFile = () => {
+  throw new Error();
+};
+const program = ts.createProgram(['index.ts'], compilerOptions, host);
+const checker = program.getTypeChecker();
+
+function convertSignature(signature) {
+  return signature.parameters.map((symbol) => {
+    const param = symbol.valueDeclaration;
+    if (param.questionToken) {
+      return `?${symbol.name}`;
+    }
+    if (param.dotDotDotToken) {
+      return `...${symbol.name}`;
+    }
+    return symbol.name;
+  });
+}
 
 const out = [];
-for (const [key, value] of annotationMap) {
-  if (value.length === 1 && value[0].length === 0) {
-    continue; // eslint-disable-line no-continue
+
+program.getSourceFile('index.ts').statements.forEach((stmt, i) => {
+  const path = functions[i - required.size];
+  if (!path) {
+    return;
   }
-  value.sort((a, b) => a.length - b.length);
-  out.push(`  [${key}, ${JSON.stringify(value)}]`);
-}
+
+  const type = checker.getTypeAtLocation(stmt.expression);
+  if (checker.typeToString(type) === 'any') {
+    console.error(path);
+  }
+
+  const data = {
+    call: [],
+    construct: [],
+  };
+
+  type.getCallSignatures()
+    .filter((s) => s.parameters.length > 0)
+    .forEach((signature) => {
+      data.call.push(convertSignature(signature));
+    });
+  type.getConstructSignatures()
+    .filter((s) => s.parameters.length > 0)
+    .forEach((signature) => {
+      data.construct.push(convertSignature(signature));
+    });
+
+  data.call.sort((a, b) => a.length - b.length);
+  data.construct.sort((a, b) => a.length - b.length);
+
+  out.push(`  [${path}, ${JSON.stringify(data)}]`);
+});
 
 fs.writeFileSync('./src/annotation_map.js', `'use strict';
 
@@ -150,7 +135,7 @@ fs.writeFileSync('./src/annotation_map.js', `'use strict';
 // in the repl. if a method isn't listed here, it is either unknown
 // to the generator script, or it doesn't take any arguments.
 
-${[...needToRequire].map((n) => `const ${n} = require('${n}');`).join('\n')}
+${[...required].map((r) => `const ${r} = require('${r}');`).join('\n')}
 
 module.exports = new WeakMap([
 ${out.join(',\n')},
