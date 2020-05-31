@@ -55,5 +55,8 @@ const parentModule = module;
   });
 }
 
+globalThis._ = undefined;
+globalThis._err = undefined;
+
 // keep process alive using stdin
 process.stdin.on('data', () => {});

@@ -226,6 +226,17 @@ async function start(wsUrl) {
   });
   rl.pause();
 
+  // if node doesn't support postprocessor, force _refreshLine
+  if (rl.postprocessor === undefined) {
+    rl._insertString = (c) => {
+      const beg = rl.line.slice(0, rl.cursor);
+      const end = rl.line.slice(rl.cursor, rl.line.length);
+      rl.line = beg + c + end;
+      rl.cursor += c.length;
+      rl._refreshLine();
+    };
+  }
+
   const history = await getHistory();
   rl.history = history.history;
 
@@ -349,6 +360,7 @@ async function start(wsUrl) {
 
     const { result: inspected } = await callFunctionOn(
       `function inspect(v) {
+        globalThis.${uncaught ? '_err' : '_'} = v;
         return util.inspect(v, {
           colors: true,
           showProxy: true,
