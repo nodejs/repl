@@ -54,7 +54,7 @@ async function start(wsUrl) {
 
     const statements = acorn.parse(line, { ecmaVersion: 2020 }).body;
     const statement = statements[statements.length - 1];
-    if (statement.type !== 'ExpressionStatement') {
+    if (!statement || statement.type !== 'ExpressionStatement') {
       return undefined;
     }
     let { expression } = statement;
