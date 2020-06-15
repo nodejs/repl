@@ -385,7 +385,9 @@ async function start(wsUrl) {
 
 const child = spawn(process.execPath, [
   '--inspect-publish-uid=http',
+  ...process.execArgv,
   require.resolve('./stub.js'),
+  ...process.argv,
 ], {
   cwd: process.cwd(),
   windowsHide: true,
