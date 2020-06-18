@@ -5,7 +5,7 @@ const path = require('path');
 const inspector = require('inspector');
 const util = require('util');
 
-inspector.open(true);
+inspector.open(0, true);
 process.stderr.write(`__DEBUGGER_URL__ ${inspector.url()}`);
 
 if (process.platform !== 'win32') {
