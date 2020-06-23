@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 'use strict';
 
 const { createInterface, clearScreenDown } = require('readline');
@@ -216,8 +218,8 @@ async function start(wsUrl) {
         .then((completions) => {
           cb(null, [completions || [], line]);
         })
-        .catch((e) => {
-          cb(e);
+        .catch(() => {
+          cb(null, [[], line]);
         });
     },
     postprocessor(line) {
@@ -345,7 +347,8 @@ async function start(wsUrl) {
           if (completion || preview) {
             process.stdout.cursorTo(PROMPT.length + rl.cursor);
           }
-        });
+        })
+        .catch(() => {});
     }
   };
 
