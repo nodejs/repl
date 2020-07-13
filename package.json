@@ -19,12 +19,12 @@
   },
   "homepage": "https://github.com/nodejs/repl#readme",
   "devDependencies": {
-    "@types/node": "^13.13.8",
+    "@types/node": "^14.0.22",
     "babel-eslint": "^10.0.3",
     "eslint": "^6.5.1",
     "eslint-config-airbnb-base": "^14.0.0",
     "eslint-plugin-import": "^2.20.2",
-    "typescript": "^3.9.2"
+    "typescript": "^3.9.6"
   },
   "dependencies": {
     "acorn": "^7.2.0",

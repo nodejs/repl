@@ -169,7 +169,7 @@ async function start(wsUrl) {
         [result, { value: expression }, { value: line }],
       );
       if (annotation.type === 'string') {
-        return [annotation.value];
+        return { fillable: false, completions: [annotation.value] };
       }
       return undefined;
     }
@@ -181,7 +181,7 @@ async function start(wsUrl) {
           keys = keys.map((k) => k.slice(filter.length));
         }
       }
-      return keys;
+      return { fillable: true, completions: keys };
     }
 
     return undefined;
@@ -215,8 +215,8 @@ async function start(wsUrl) {
     prompt: PROMPT,
     completer(line, cb) {
       completeLine(line, false)
-        .then((completions) => {
-          cb(null, [completions || [], line]);
+        .then((result) => {
+          cb(null, [result.completions || [], line]);
         })
         .catch(() => {
           cb(null, [[], line]);
@@ -335,10 +335,12 @@ async function start(wsUrl) {
           if (rl.line !== inspectedLine) {
             return;
           }
-          if (completion && completion.length > 0) {
-            ([completionCache] = completion);
+          if (completion && completion.completions.length > 0) {
+            if (completion.fillable) {
+              ([completionCache] = completion.completions);
+            }
             process.stdout.cursorTo(PROMPT.length + rl.line.length);
-            process.stdout.write(chalk.grey(completion[0]));
+            process.stdout.write(chalk.grey(completion.completions[0]));
           }
           if (preview) {
             process.stdout.write(`\n${chalk.grey(preview.slice(0, process.stdout.columns - 1))}`);
