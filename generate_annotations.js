@@ -35,10 +35,10 @@ const scan = (ns, path) => {
     }
     if (typeof name === 'symbol') {
       if (name.description.startsWith('Symbol')) {
-        scan(ns[name], `${path}[${name.description}]`);
+        scan(ns[name], `${path}?.[${name.description}]`);
       }
     } else {
-      scan(ns[name], `${path}.${name}`);
+      scan(ns[name], `${path}?.${name}`);
     }
   });
 };
