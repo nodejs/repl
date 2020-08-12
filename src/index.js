@@ -37,6 +37,7 @@ async function start(wsUrl) {
     return session.post('Runtime.evaluate', {
       expression: wrapped,
       throwOnSideEffect,
+      replMode: true,
       timeout: throwOnSideEffect ? 200 : undefined,
       objectGroup: 'OBJECT_GROUP',
     });
