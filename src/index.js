@@ -302,32 +302,36 @@ async function start(wsUrl) {
   const refreshLine = rl._refreshLine.bind(rl);
   rl._refreshLine = () => {
     completionCache = undefined;
+    const inspectedLine = rl.line;
 
     if (MODE === 'REVERSE') {
       process.stdout.moveCursor(0, -1);
       process.stdout.cursorTo(PROMPT.length);
       clearScreenDown(process.stdout);
       let match;
-      if (rl.line) {
-        match = rl.history.find((h) => h.includes(rl.line));
+      if (inspectedLine) {
+        match = rl.history.find((h) => h.includes(inspectedLine));
       }
       if (match) {
         match = highlight(match);
-        match = underlineIgnoreANSI(match, rl.line);
+        match = underlineIgnoreANSI(match, inspectedLine);
       }
-      process.stdout.write(`${match || ''}\n(reverse-i-search): ${rl.line}`);
+      process.stdout.write(`${match || ''}\n(reverse-i-search): ${inspectedLine}`);
       process.stdout.cursorTo('(reverse-i-search): '.length + rl.cursor);
       return;
     }
 
+    if (rl.postprocessor === undefined) {
+      rl.line = highlight(inspectedLine);
+    }
     refreshLine();
+    rl.line = inspectedLine;
 
-    if (rl.line !== '') {
+    if (inspectedLine !== '') {
       process.stdout.cursorTo(PROMPT.length + rl.line.length);
       clearScreenDown(process.stdout);
       process.stdout.cursorTo(PROMPT.length + rl.cursor);
 
-      const inspectedLine = rl.line;
       Promise.all([
         completeLine(inspectedLine, true),
         getPreview(inspectedLine),
