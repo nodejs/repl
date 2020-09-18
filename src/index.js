@@ -359,13 +359,18 @@ async function start(wsUrl) {
     }
   };
 
+  process.stdout.write(`\
+Node.js ${process.versions.node} (V8 ${process.versions.v8})
+Prototype REPL - https://github.com/nodejs/repl
+`);
+
   rl.resume();
   rl.prompt();
   for await (const line of rl) {
     rl.pause();
     clearScreenDown(process.stdout);
 
-    const { result, exceptionDetails } = await evaluate(line);
+    const { result, exceptionDetails } = await evaluate(line, false);
     const uncaught = !!exceptionDetails;
 
     const { result: inspected } = await callFunctionOn(
@@ -379,7 +384,7 @@ async function start(wsUrl) {
       [result],
     );
 
-    process.stdout.write(`${uncaught ? 'Uncaught: ' : ''}${inspected.value}\n`);
+    process.stdout.write(`${uncaught ? 'Uncaught ' : ''}${inspected.value}\n`);
 
     await Promise.all([
       session.post('Runtime.releaseObjectGroup', {

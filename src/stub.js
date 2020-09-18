@@ -19,7 +19,12 @@ Module.builtinModules
     if (name === 'domain' || name === 'repl' || name === 'sys') {
       return;
     }
-    global[name] = require(name);
+    Object.defineProperty(globalThis, name, {
+      value: require(name),
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    });
   });
 
 try {
@@ -42,21 +47,41 @@ const parentModule = module;
   module.paths = Module._resolveLookupPaths('<repl>', parentModule, true) || [];
   module._compile('module.exports = require;', '<repl>');
 
-  Object.defineProperty(global, 'module', {
-    configurable: true,
+  Object.defineProperty(globalThis, 'module', {
     writable: true,
+    enumerable: false,
+    configurable: true,
     value: module,
   });
 
-  Object.defineProperty(global, 'require', {
-    configurable: true,
+  Object.defineProperty(globalThis, 'require', {
     writable: true,
+    enumerable: false,
+    configurable: true,
     value: module.exports,
   });
 }
 
-globalThis._ = undefined;
-globalThis._err = undefined;
+Object.defineProperty(globalThis, '_', {
+  value: undefined,
+  writable: true,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(globalThis, '_err', {
+  value: undefined,
+  writable: true,
+  enumerable: false,
+  configurable: true,
+});
+
+process.on('uncaughtException', (e) => {
+  process.stdout.write(`Uncaught ${util.inspect(e)}\n`);
+});
+
+process.on('unhandledRejection', (reason) => {
+  process.stdout.write(`Unhandled ${util.inspect(reason)}\n`);
+});
 
 // keep process alive using stdin
 process.stdin.on('data', () => {});
