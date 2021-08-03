@@ -177,18 +177,8 @@ function completeCall(method, expression, buffer) {
     CallExpression: 'call',
     NewExpression: 'construct',
   }[expression.type]].slice(0);
-  const target = expression.arguments.length;
-  let params = entry.sort((a, b) => {
-    // find the completion with the closest number of args
-    // to the given expression
-    const Da = Math.abs(target - a.length);
-    const Db = Math.abs(target - b.length);
-    // if the delta is equal, prefer the longer one
-    if (Da === Db) {
-      return b.length - a.length;
-    }
-    return Da - Db;
-  })[0];
+  const target = expression.arguments.length + (buffer.trim().endsWith(',') ? 1 : 0);
+  let params = entry.find((p) => p.length >= target) || entry.at(-1);
   if (target >= params.length) {
     if (params[params.length - 1].startsWith('...')) {
       return `, ${params[params.length - 1]}`;
