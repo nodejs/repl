@@ -175,7 +175,7 @@ async function start(wsUrl) {
     if (keys) {
       if (filter) {
         keys = keys
-          .filter((k) => k.startsWith(filter))
+          .filter((k) => k.startsWith(filter) && k !== filter)
           .map((k) => k.slice(filter.length));
       }
       return { fillable: true, completions: keys };
@@ -213,7 +213,11 @@ async function start(wsUrl) {
     completer(line, cb) {
       completeLine(line)
         .then((result) => {
-          cb(null, [(result.completions || []).map((l) => line + l), line]);
+          if (result.fillable) {
+            cb(null, [(result.completions || []).map((l) => line + l), line]);
+          } else {
+            cb(null, [[], line]);
+          }
         })
         .catch(() => {
           cb(null, [[], line]);
