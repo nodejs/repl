@@ -138,7 +138,9 @@ program.getSourceFile('index.ts').statements.forEach((stmt, i) => {
   data.call.sort((a, b) => a.length - b.length);
   data.construct.sort((a, b) => a.length - b.length);
 
-  out.push(`  [${path}, ${JSON.stringify(data)}]`);
+  if (data.call.length > 0 || data.construct.length > 0) {
+    out.push(`  [${path}, ${JSON.stringify(data)}]`);
+  }
 });
 
 fs.writeFileSync('./src/annotation_map.js', `'use strict';

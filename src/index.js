@@ -50,7 +50,7 @@ async function start(wsUrl) {
     objectGroup: 'OBJECT_GROUP',
   });
 
-  const completeLine = async (line, cutLineStart) => {
+  const completeLine = async (line) => {
     if (line.length === 0) {
       return getGlobalNames();
     }
@@ -140,10 +140,7 @@ async function start(wsUrl) {
             } else {
               r = strEscape(key);
             }
-            if (cutLineStart) {
-              return `${r}]`;
-            }
-            return r;
+            return `${r}]`;
           });
         } else {
           keys = keys.filter(isIdentifier);
@@ -177,10 +174,9 @@ async function start(wsUrl) {
 
     if (keys) {
       if (filter) {
-        keys = keys.filter((k) => k.startsWith(filter));
-        if (cutLineStart) {
-          keys = keys.map((k) => k.slice(filter.length));
-        }
+        keys = keys
+          .filter((k) => k.startsWith(filter))
+          .map((k) => k.slice(filter.length));
       }
       return { fillable: true, completions: keys };
     }
@@ -215,9 +211,9 @@ async function start(wsUrl) {
     output: process.stdout,
     prompt: PROMPT,
     completer(line, cb) {
-      completeLine(line, false)
+      completeLine(line)
         .then((result) => {
-          cb(null, [result.completions || [], line]);
+          cb(null, [(result.completions || []).map((l) => line + l), line]);
         })
         .catch(() => {
           cb(null, [[], line]);
@@ -333,7 +329,7 @@ async function start(wsUrl) {
       process.stdout.cursorTo(PROMPT.length + rl.cursor);
 
       Promise.all([
-        completeLine(inspectedLine, true),
+        completeLine(inspectedLine),
         getPreview(inspectedLine),
       ])
         .then(([completion, preview]) => {
