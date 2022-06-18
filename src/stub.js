@@ -62,17 +62,13 @@ const parentModule = module;
   });
 }
 
-Object.defineProperty(globalThis, '_', {
-  value: undefined,
-  writable: true,
-  enumerable: false,
-  configurable: true,
-});
-Object.defineProperty(globalThis, '_err', {
-  value: undefined,
-  writable: true,
-  enumerable: false,
-  configurable: true,
+['_', '__', '___', '_err'].forEach((prop) => {
+  Object.defineProperty(globalThis, prop, {
+    value: undefined,
+    writable: true,
+    enumerable: false,
+    configurable: true,
+  });
 });
 
 process.on('uncaughtException', (e) => {
@@ -82,6 +78,26 @@ process.on('uncaughtException', (e) => {
 process.on('unhandledRejection', (reason) => {
   process.stdout.write(`Unhandled ${util.inspect(reason)}\n`);
 });
+
+globalThis[Symbol.for('nodejs.repl.updateInspect')] = (uncaught, line, value) => {
+  if (uncaught) {
+    globalThis._err = value;
+  } else {
+    globalThis.___ = globalThis.__;
+    globalThis.__ = globalThis._;
+    globalThis._ = value;
+    Object.defineProperty(globalThis, `_${line}`, {
+      value,
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  return util.inspect(value, {
+    colors: true,
+    showProxy: true,
+  });
+};
 
 // keep process alive using stdin
 process.stdin.on('data', () => {});

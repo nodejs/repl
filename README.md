@@ -1,16 +1,8 @@
 # Node.js REPL Prototype
 
-![](https://gc.gy/39485171.png)
-![](https://gc.gy/39485205.png)
-![](https://gc.gy/39485229.png)
-![](https://gc.gy/39485261.png)
-![](https://gc.gy/39508489.png)
-![](https://gc.gy/39485850.png)
-
 Goals:
 
 - Better debugging and interaction
-  - Language Server Protocol
   - Runtime inspection
   - Benchmarking
 - Pretty UI
@@ -19,6 +11,14 @@ Goals:
 - Keep the code neat for future changes
 
 ## Usage
+
+![](https://gc.gy/123280943.png)  
+![](https://gc.gy/123280961.png)  
+![](https://gc.gy/123280991.png)  
+![](https://gc.gy/123281010.png)  
+![](https://gc.gy/123281037.png)  
+![](https://gc.gy/123281084.png)  
+![](https://gc.gy/123281118.png)
 
 ### Install
 

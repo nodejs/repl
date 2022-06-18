@@ -3,17 +3,35 @@
 const fs = require('fs');
 const Module = require('module');
 const ts = require('typescript');
+const domain = require('domain');
+
+const d = domain.create();
+d.on('error', () => {});
 
 const functions = [];
 
 const scanned = new Set([
   process.mainModule,
 ]);
+const forbiddenPaths = new Set([
+  // duplicate with buffer module
+  'globalThis?.Buffer',
+  // prints experimental warning
+  'globalThis?.fetch',
+  // prints experimental warning
+  'globalThis?.FormData',
+  // prints experimental warning
+  'globalThis?.Headers',
+  // prints experimental warning
+  'globalThis?.Request',
+  // prints experimental warning
+  'globalThis?.Response',
+]);
 const scan = (ns, path) => {
   if (scanned.has(ns)) {
     return;
   }
-  if (path === 'globalThis.Buffer') {
+  if (forbiddenPaths.has(path)) {
     return;
   }
   scanned.add(ns);
@@ -29,7 +47,9 @@ const scan = (ns, path) => {
       return;
     }
     try {
-      ns[name];
+      d.run(() => {
+        ns[name];
+      });
     } catch {
       return;
     }
@@ -67,7 +87,7 @@ host.readFile = (name) => {
   if (name === 'index.ts') {
     return `
     ${[...required].map((r) => `import * as ${r} from '${r}';`).join('\n')}
-    ${functions.join('\n')}
+    ${functions.join('\n').replaceAll('?', '')}
     `;
   }
   return originalReadFile.call(host, name);

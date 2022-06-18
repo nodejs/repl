@@ -3,6 +3,7 @@
 'use strict';
 
 const { createInterface, clearScreenDown } = require('readline');
+const stripAnsi = require('strip-ansi');
 const { spawn } = require('child_process');
 const acorn = require('acorn-loose');
 const chalk = require('chalk');
@@ -11,7 +12,20 @@ const { isIdentifier, strEscape, underlineIgnoreANSI } = require('./util');
 const highlight = require('./highlight');
 const getHistory = require('./history');
 
-const PROMPT = '> ';
+function makePrompt(i) {
+  return chalk.green(`In [${chalk.bold(i)}]: `);
+}
+
+function makePromptOut(inspected, i) {
+  if (/[\r\n\u2028\u2029]/u.test(inspected)) {
+    return '';
+  }
+  return chalk.red(`Out[${chalk.bold(i)}]: `);
+}
+
+function promptLength(i) {
+  return `In [${i}]: `.length;
+}
 
 async function start(wsUrl) {
   const session = await Session.create(wsUrl);
@@ -55,7 +69,7 @@ async function start(wsUrl) {
       return getGlobalNames();
     }
 
-    const statements = acorn.parse(line, { ecmaVersion: 2020 }).body;
+    const statements = acorn.parse(line, { ecmaVersion: 2021 }).body;
     const statement = statements[statements.length - 1];
     if (!statement || statement.type !== 'ExpressionStatement') {
       return undefined;
@@ -209,7 +223,7 @@ async function start(wsUrl) {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: PROMPT,
+    prompt: makePrompt(1),
     completer(line, cb) {
       completeLine(line)
         .then((result) => {
@@ -245,8 +259,12 @@ async function start(wsUrl) {
 
   let MODE = 'NORMAL';
 
+  let promptIndex = 1;
+
   let nextCtrlCKills = false;
+  let nextCtrlDKills = false;
   rl.on('SIGINT', () => {
+    nextCtrlDKills = false;
     if (MODE === 'REVERSE') {
       MODE = 'NORMAL';
       process.stdout.moveCursor(0, -1);
@@ -260,7 +278,7 @@ async function start(wsUrl) {
       process.exit();
     } else {
       nextCtrlCKills = true;
-      process.stdout.write(`\n(To exit, press ^C again)\n${PROMPT}`);
+      process.stdout.write(`\n(To exit, press ^C again)\n${rl.getPrompt()}`);
     }
   });
 
@@ -270,6 +288,16 @@ async function start(wsUrl) {
     if (!(key.ctrl && key.name === 'c')) {
       nextCtrlCKills = false;
     }
+
+    if (key.ctrl && key.name === 'd') {
+      if (nextCtrlDKills) {
+        process.exit();
+      }
+      nextCtrlDKills = true;
+      process.stdout.write(`\n(To exit, press ^D again)\n${rl.getPrompt()}`);
+      return;
+    }
+    nextCtrlDKills = false;
 
     if (key.ctrl && key.name === 'r' && MODE === 'NORMAL') {
       MODE = 'REVERSE';
@@ -299,6 +327,18 @@ async function start(wsUrl) {
     }
   };
 
+  const countLines = (line) => {
+    let count = 0;
+    line.split(/\r?\n/).forEach((inner) => {
+      inner = stripAnsi(inner);
+      count += 1;
+      if (inner.length > process.stdout.columns) {
+        count += Math.floor(inner.length / process.stdout.columns);
+      }
+    });
+    return count;
+  };
+
   const refreshLine = rl._refreshLine.bind(rl);
   rl._refreshLine = () => {
     completionCache = undefined;
@@ -306,7 +346,7 @@ async function start(wsUrl) {
 
     if (MODE === 'REVERSE') {
       process.stdout.moveCursor(0, -1);
-      process.stdout.cursorTo(PROMPT.length);
+      process.stdout.cursorTo(promptLength(promptIndex));
       clearScreenDown(process.stdout);
       let match;
       if (inspectedLine) {
@@ -327,11 +367,10 @@ async function start(wsUrl) {
     refreshLine();
     rl.line = inspectedLine;
 
-    if (inspectedLine !== '') {
-      process.stdout.cursorTo(PROMPT.length + rl.line.length);
-      clearScreenDown(process.stdout);
-      process.stdout.cursorTo(PROMPT.length + rl.cursor);
+    // fix cursor offset because of ansi codes
+    process.stdout.cursorTo(promptLength(promptIndex) + rl.cursor);
 
+    if (inspectedLine !== '') {
       Promise.all([
         completeLine(inspectedLine),
         getPreview(inspectedLine),
@@ -340,20 +379,23 @@ async function start(wsUrl) {
           if (rl.line !== inspectedLine) {
             return;
           }
+
+          let rows = 0;
           if (completion && completion.completions.length > 0) {
             if (completion.fillable) {
               ([completionCache] = completion.completions);
             }
-            process.stdout.cursorTo(PROMPT.length + rl.line.length);
+            process.stdout.cursorTo(promptLength(promptIndex) + rl.line.length);
             process.stdout.write(chalk.grey(completion.completions[0]));
+            rows += countLines(completion.completions[0]) - 1;
           }
           if (preview) {
-            process.stdout.write(`\n${chalk.grey(preview.slice(0, process.stdout.columns - 1))}`);
-            process.stdout.moveCursor(0, -1);
+            process.stdout.write(chalk.grey(`\nOut[${promptIndex}]: ${preview}\n`));
+            rows += countLines(preview) + 1;
           }
-          if (completion || preview) {
-            process.stdout.cursorTo(PROMPT.length + rl.cursor);
-          }
+
+          process.stdout.cursorTo(promptLength(promptIndex) + rl.cursor);
+          process.stdout.moveCursor(0, -rows);
         })
         .catch(() => {});
     }
@@ -362,6 +404,7 @@ async function start(wsUrl) {
   process.stdout.write(`\
 Node.js ${process.versions.node} (V8 ${process.versions.v8})
 Prototype REPL - https://github.com/nodejs/repl
+
 `);
 
   rl.resume();
@@ -374,17 +417,14 @@ Prototype REPL - https://github.com/nodejs/repl
     const uncaught = !!exceptionDetails;
 
     const { result: inspected } = await callFunctionOn(
-      `function inspect(v) {
-        globalThis.${uncaught ? '_err' : '_'} = v;
-        return util.inspect(v, {
-          colors: true,
-          showProxy: true,
-        });
-      }`,
-      [result],
+      'function inspect(uncaught, line, value) { return globalThis[Symbol.for("nodejs.repl.updateInspect")](uncaught, line, value); }',
+      [{ value: uncaught }, { value: promptIndex }, result],
     );
 
-    process.stdout.write(`${uncaught ? 'Uncaught ' : ''}${inspected.value}\n`);
+    process.stdout.write(`${makePromptOut(inspected.value, promptIndex)}${uncaught ? 'Uncaught ' : ''}${inspected.value}\n\n`);
+
+    promptIndex += 1;
+    rl.setPrompt(makePrompt(promptIndex));
 
     await Promise.all([
       session.post('Runtime.releaseObjectGroup', {
