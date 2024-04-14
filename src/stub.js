@@ -2,16 +2,7 @@
 
 const Module = require('module');
 const path = require('path');
-const inspector = require('inspector');
 const util = require('util');
-
-inspector.open(0, true);
-process.stderr.write(`__DEBUGGER_URL__ ${inspector.url()}`);
-
-if (process.platform !== 'win32') {
-  util.inspect.styles.number = 'blue';
-  util.inspect.styles.bigint = 'blue';
-}
 
 Module.builtinModules
   .filter((x) => !/^_|\//.test(x))
@@ -98,6 +89,3 @@ globalThis[Symbol.for('nodejs.repl.updateInspect')] = (uncaught, line, value) =>
     showProxy: true,
   });
 };
-
-// keep process alive using stdin
-process.stdin.on('data', () => {});

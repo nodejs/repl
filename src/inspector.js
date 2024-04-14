@@ -1,59 +1,70 @@
 'use strict';
 
 const { EventEmitter } = require('events');
-const WebSocket = require('ws');
+const inspector = require('inspector');
+
+const events = [
+  'inspectorNotification',
+  'Runtime.executionContextCreated',
+  'Runtime.executionContextDestroyed',
+  'Runtime.executionContextsCleared',
+  'Runtime.exceptionThrown',
+  'Runtime.exceptionRevoked',
+  'Runtime.consoleAPICalled',
+  'Runtime.inspectRequested',
+  'Debugger.scriptParsed',
+  'Debugger.scriptFailedToParse',
+  'Debugger.breakpointResolved',
+  'Debugger.paused',
+  'Debugger.resumed',
+  'Console.messageAdded',
+  'Profiler.consoleProfileStarted',
+  'Profiler.consoleProfileFinished',
+  'HeapProfiler.addHeapSnapshotChunk',
+  'HeapProfiler.resetProfiles',
+  'HeapProfiler.reportHeapSnapshotProgress',
+  'HeapProfiler.lastSeenObjectId',
+  'HeapProfiler.heapStatsUpdate',
+  'NodeTracing.dataCollected',
+  'NodeTracing.tracingComplete',
+  'NodeWorker.attachedToWorker',
+  'NodeWorker.detachedFromWorker',
+  'NodeWorker.receivedMessageFromWorker',
+  'NodeRuntime.waitingForDisconnect'
+];
 
 class Session extends EventEmitter {
   constructor(url) {
     super();
 
-    this.ws = new WebSocket(url);
-    this.ws.on('message', (d) => {
-      this.onMessage(d);
-    });
-    this.ws.on('open', () => {
-      this.emit('open');
-    });
+    this.session = new inspector.Session();
+    this.session.connect();
 
-    this.messageCounter = 0;
-    this.messages = new Map();
+    for (const event of events) {
+      this.session.on(event, this.onMessage.bind(this));
+    }
   }
 
   static create(url) {
-    return new Promise((resolve) => {
-      const s = new Session(url);
-      s.once('open', () => resolve(s));
-    });
+    return new Session(url);
   }
 
   onMessage(d) {
-    const { id, method, params, result, error } = JSON.parse(d);
+    const { method, params } = d;
     if (method) {
       this.emit(method, params);
-    } else {
-      const { resolve, reject } = this.messages.get(id);
-      this.messages.delete(id);
-      if (error) {
-        const e = new Error(error.message);
-        e.code = error.code;
-        reject(e);
-      } else {
-        resolve(result);
-      }
     }
   }
 
   post(method, params) {
     return new Promise((resolve, reject) => {
-      const id = this.messageCounter;
-      this.messageCounter += 1;
-      const message = {
-        method,
-        params,
-        id,
-      };
-      this.messages.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify(message));
+      this.session.post(method, params, (err, result) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(result);
+        }
+      });
     });
   }
 }

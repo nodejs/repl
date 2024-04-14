@@ -3,35 +3,43 @@
 'use strict';
 
 const { createInterface, clearScreenDown } = require('readline');
-const stripAnsi = require('strip-ansi');
-const { spawn } = require('child_process');
 const acorn = require('acorn-loose');
-const chalk = require('chalk');
 const { Session } = require('./inspector');
 const { isIdentifier, strEscape, underlineIgnoreANSI } = require('./util');
 const highlight = require('./highlight');
 const getHistory = require('./history');
+const util = require('util');
+
+require('./stub.js')
+
+function stripAnsi(text) {
+  const ansiEscape = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+  return text.replace(ansiEscape, '');
+}
 
 function makePrompt(i) {
-  return chalk.green(`In [${chalk.bold(i)}]: `);
+  return util.styleText('green', `In [${util.styleText('bold', '' + i)}]: `);
 }
 
 function makePromptOut(inspected, i) {
   if (/[\r\n\u2028\u2029]/u.test(inspected)) {
     return '';
   }
-  return chalk.red(`Out[${chalk.bold(i)}]: `);
+  return util.styleText('red', `Out[${util.styleText('bold', '' + i)}]: `);
 }
 
 function promptLength(i) {
   return `In [${i}]: `.length;
 }
 
-async function start(wsUrl) {
-  const session = await Session.create(wsUrl);
+async function start() {
+  const session = await Session.create();
 
-  session.post('Runtime.enable');
-  const [{ context }] = await Session.once(session, 'Runtime.executionContextCreated');
+  const { context } = await new Promise((resolve) => {
+    session.once('Runtime.executionContextCreated', resolve);
+    session.post('Runtime.enable');
+  });
+
   const { result: remoteGlobal } = await session.post('Runtime.evaluate', {
     expression: 'globalThis',
   });
@@ -113,8 +121,8 @@ async function start(wsUrl) {
 
         // Convert inspection target to object.
         if (evaluateResult.result.type !== 'object'
-            && evaluateResult.result.type !== 'undefined'
-            && evaluateResult.result.subtype !== 'null') {
+          && evaluateResult.result.type !== 'undefined'
+          && evaluateResult.result.subtype !== 'null') {
           evaluateResult = await evaluate(`Object(${expr})`, true);
           if (evaluateResult.exceptionDetails) {
             return undefined;
@@ -205,19 +213,28 @@ async function start(wsUrl) {
       }
       return callFunctionOn(
         `function inspect(v) {
-          const i = util.inspect(v, {
+          let i = util.inspect(v, {
             colors: false,
             breakLength: Infinity,
             compact: true,
             maxArrayLength: 10,
             depth: 1,
           });
-          return i.split('\\n')[0].trim();
+          return i;
         }`,
         [result],
       );
     })
-    .then(({ result }) => result.value)
+    .then(({ result }) => {
+      let val = result.value;
+      let noAnsi = stripAnsi(val);
+      let length = process.stdout.columns - promptLength(promptIndex) - 2;
+      if (noAnsi.length > length) {
+        noAnsi = noAnsi.slice(0, length - 3) + '...';
+      }
+
+      return noAnsi;
+    })
     .catch(() => undefined);
 
   const rl = createInterface({
@@ -371,10 +388,8 @@ async function start(wsUrl) {
     process.stdout.cursorTo(promptLength(promptIndex) + rl.cursor);
 
     if (inspectedLine !== '') {
-      Promise.all([
-        completeLine(inspectedLine),
-        getPreview(inspectedLine),
-      ])
+      completeLine(inspectedLine)
+        .then(async(completion) => [completion, await getPreview(inspectedLine + (completion?.completions[0] || ''))])
         .then(([completion, preview]) => {
           if (rl.line !== inspectedLine) {
             return;
@@ -386,18 +401,18 @@ async function start(wsUrl) {
               ([completionCache] = completion.completions);
             }
             process.stdout.cursorTo(promptLength(promptIndex) + rl.line.length);
-            process.stdout.write(chalk.grey(completion.completions[0]));
+            process.stdout.write(util.styleText('grey', completion.completions[0]));
             rows += countLines(completion.completions[0]) - 1;
           }
           if (preview) {
-            process.stdout.write(chalk.grey(`\nOut[${promptIndex}]: ${preview}\n`));
+            process.stdout.write(util.styleText('grey', `\nOut[${promptIndex}]: ${preview}\n`));
             rows += countLines(preview) + 1;
           }
 
           process.stdout.cursorTo(promptLength(promptIndex) + rl.cursor);
           process.stdout.moveCursor(0, -rows);
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   };
 
@@ -420,7 +435,6 @@ Prototype REPL - https://github.com/nodejs/repl
       'function inspect(uncaught, line, value) { return globalThis[Symbol.for("nodejs.repl.updateInspect")](uncaught, line, value); }',
       [{ value: uncaught }, { value: promptIndex }, result],
     );
-
     process.stdout.write(`${makePromptOut(inspected.value, promptIndex)}${uncaught ? 'Uncaught ' : ''}${inspected.value}\n\n`);
 
     promptIndex += 1;
@@ -438,25 +452,4 @@ Prototype REPL - https://github.com/nodejs/repl
   }
 }
 
-const child = spawn(process.execPath, [
-  '--inspect-publish-uid=http',
-  ...process.execArgv,
-  require.resolve('./stub.js'),
-  ...process.argv,
-], {
-  cwd: process.cwd(),
-  windowsHide: true,
-});
-
-child.stdout.on('data', (data) => {
-  process.stdout.write(data);
-});
-
-child.stderr.on('data', (data) => {
-  const s = data.toString();
-  if (s.startsWith('__DEBUGGER_URL__')) {
-    start(s.split(' ')[1]);
-  } else if (s !== 'Debugger attached.\n') {
-    process.stderr.write(data);
-  }
-});
+start();

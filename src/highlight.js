@@ -1,43 +1,46 @@
 'use strict';
 
 const emphasize = require('emphasize');
-const chalk = require('chalk');
+const util = require('util');
 
-const windows = process.platform === 'win32';
+function makeStyled([start, end]) {
+  return (s) => `\x1b[${start}m${s}\x1b[${end}m`;
+}
+
 const sheet = {
-  'comment': chalk.gray,
-  'quote': chalk.gray,
+  'comment': makeStyled(util.inspect.colors.grey),
+  'quote': makeStyled(util.inspect.colors.grey),
 
-  'keyword': chalk.green,
-  'addition': chalk.green,
+  'keyword': makeStyled(util.inspect.colors.green),
+  'addition': makeStyled(util.inspect.colors.green),
 
-  'number': windows ? chalk.yellow : chalk.blue,
-  'string': chalk.green,
-  'meta meta-string': chalk.cyan,
-  'literal': chalk.cyan,
-  'doctag': chalk.cyan,
-  'regexp': chalk.cyan,
+  'number': makeStyled(util.inspect.colors.yellow),
+  'string': makeStyled(util.inspect.colors.green),
+  'meta meta-string': makeStyled(util.inspect.colors.cyan),
+  'literal': makeStyled(util.inspect.colors.cyan),
+  'doctag': makeStyled(util.inspect.colors.cyan),
+  'regexp': makeStyled(util.inspect.colors.cyan),
 
   'attribute': undefined,
   'attr': undefined,
-  'variable': chalk.yellow,
-  'template-variable': chalk.yellow,
-  'class title': chalk.yellow,
-  'type': chalk.yellow,
+  'variable': makeStyled(util.inspect.colors.yellow),
+  'template-variable': makeStyled(util.inspect.colors.yellow),
+  'class title': makeStyled(util.inspect.colors.yellow),
+  'type': makeStyled(util.inspect.colors.yellow),
 
-  'symbol': chalk.magenta,
-  'bullet': chalk.magenta,
-  'subst': chalk.magenta,
-  'meta': chalk.magenta,
-  'meta keyword': chalk.magenta,
-  'link': chalk.magenta,
+  'symbol': makeStyled(util.inspect.colors.magenta),
+  'bullet': makeStyled(util.inspect.colors.magenta),
+  'subst': makeStyled(util.inspect.colors.magenta),
+  'meta': makeStyled(util.inspect.colors.magenta),
+  'meta keyword': makeStyled(util.inspect.colors.magenta),
+  'link': makeStyled(util.inspect.colors.magenta),
 
-  'built_in': chalk.cyan,
-  'deletion': chalk.red,
+  'built_in': makeStyled(util.inspect.colors.cyan),
+  'deletion': makeStyled(util.inspect.colors.red),
 
-  'emphasis': chalk.italic,
-  'strong': chalk.bold,
-  'formula': chalk.inverse,
+  'emphasis': makeStyled(util.inspect.colors.italic),
+  'strong': makeStyled(util.inspect.colors.bold),
+  'formula': makeStyled(util.inspect.colors.inverse),
 };
 
 module.exports = (s) =>

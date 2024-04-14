@@ -29,10 +29,7 @@
   "dependencies": {
     "acorn": "^8.7.1",
     "acorn-loose": "^8.3.0",
-    "chalk": "^4.1.2",
-    "emphasize": "^4.2.0",
-    "strip-ansi": "^6.0.1",
-    "ws": "^7.3.0"
+    "emphasize": "^4.2.0"
   },
   "private": true
 }
