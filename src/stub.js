@@ -5,7 +5,22 @@ const path = require('path');
 const inspector = require('inspector');
 const util = require('util');
 
-inspector.open(0, true);
+// Handle inspector.open() API differences across Node.js versions
+if (!inspector.url()) {
+  try {
+    // Try Node.js v24+ API (host, port)
+    inspector.open(9229, '127.0.0.1');
+  } catch (err) {
+    // Fall back to Node.js v20 and below API (fd, host, port)
+    try {
+      inspector.open(0, 'localhost', 9229);
+    } catch (fallbackErr) {
+      // If both fail, continue without debugger
+      console.error('Failed to open inspector:', fallbackErr.message);
+    }
+  }
+}
+
 process.stderr.write(`__DEBUGGER_URL__ ${inspector.url()}`);
 
 if (process.platform !== 'win32') {

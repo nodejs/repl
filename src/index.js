@@ -438,25 +438,44 @@ Prototype REPL - https://github.com/nodejs/repl
   }
 }
 
-const child = spawn(process.execPath, [
-  '--inspect-publish-uid=http',
-  ...process.execArgv,
-  require.resolve('./stub.js'),
-  ...process.argv,
-], {
-  cwd: process.cwd(),
-  windowsHide: true,
-});
+const net = require('net');
 
-child.stdout.on('data', (data) => {
-  process.stdout.write(data);
-});
+function findAvailablePort(startPort = 9229) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(startPort, '127.0.0.1', () => {
+      const port = server.address().port;
+      server.close(() => resolve(port));
+    });
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        resolve(findAvailablePort(startPort + 1));
+      } else {
+        reject(err);
+      }
+    });
+  });
+}
 
-child.stderr.on('data', (data) => {
-  const s = data.toString();
-  if (s.startsWith('__DEBUGGER_URL__')) {
-    start(s.split(' ')[1]);
-  } else if (s !== 'Debugger attached.\n') {
-    process.stderr.write(data);
-  }
+findAvailablePort().then(port => {
+  const child = spawn(process.execPath, [
+    `--inspect=${port}`,
+    `--inspect-publish-uid=http`,
+    require.resolve('./stub.js'),
+    ...process.argv,
+  ], {
+      cwd: process.cwd(),
+      windowsHide: true,
+  });
+  child.stdout.on('data', (data) => {
+    process.stdout.write(data);
+  });
+  child.stderr.on('data', (data) => {
+    const s = data.toString();
+    if (s.startsWith('__DEBUGGER_URL__')) {
+      start(s.split(' ')[1]);
+    } else if (s !== 'Debugger attached.\n') {
+      process.stderr.write(data);
+    }
+  });
 });
